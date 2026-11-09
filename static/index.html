@@ -94,17 +94,36 @@
 
 <dialog id="importDlg">
   <div class="ph">导入自选</div>
-  <div class="pad">
-    <p class="muted">支持：TradingView 导出的自选（.txt，如 <code>NASDAQ:AAPL,SSE:600519,###分组</code>）、
-      CSV 第一列为代码、或每行一个代码。</p>
-    <input type="file" id="importFile" accept=".txt,.csv">
-    <textarea id="importText" rows="10" placeholder="也可以直接粘贴到这里"></textarea>
-    <label><input type="checkbox" id="importReplace"> 替换当前分组（不勾选则追加）</label>
+  <div class="pad" id="impStep1">
+    <p class="muted">支持：同花顺持仓 / 自选（直接复制表格粘贴，含"证券代码"列）、TradingView 导出的自选（.txt，如
+      <code>NASDAQ:AAPL,SSE:600519,###分组</code>）、CSV 第一列为代码、或每行一个代码。</p>
+    <input type="file" id="importFile" accept=".txt,.csv,.xls,.tsv">
+    <textarea id="importText" rows="10" placeholder="把内容粘贴到这里，下一步会先让你确认再导入"></textarea>
     <div class="dlgbtns">
-      <button id="importOk">导入</button>
+      <button id="importNext">下一步：预览</button>
       <button id="importCancel">关闭</button>
     </div>
     <p id="importMsg" class="muted"></p>
+  </div>
+  <div class="pad" id="impStep2" style="display:none">
+    <div class="imp-head">
+      <span id="impSummary"></span>
+      <span>导入到
+        <select id="impTarget"></select>
+        <input id="impNewGroup" placeholder="新分组名称" style="display:none; width: 9rem">
+      </span>
+    </div>
+    <div class="imp-tablewrap">
+      <table id="impTable">
+        <thead><tr><th><input type="checkbox" id="impAll" checked></th><th>原始代码</th><th>名称</th><th>识别为</th><th>市场</th><th>状态</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <label><input type="checkbox" id="importReplace"> 清空目标分组后再导入（不勾选则追加）</label>
+    <div class="dlgbtns">
+      <button id="impBack">返回修改</button>
+      <button id="impConfirm" class="primary">确认导入</button>
+    </div>
   </div>
 </dialog>
 

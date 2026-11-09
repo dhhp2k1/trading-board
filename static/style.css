@@ -102,7 +102,7 @@ main { flex: 1; display: grid; grid-template-columns: 27rem 1fr 25.6rem; min-hei
 footer { display: flex; justify-content: space-between; padding: 2px 8px; border-top: 1px solid var(--line); color: var(--muted); }
 footer select { padding: 0 4px; }
 
-dialog { background: #000; color: var(--text); border: 1px solid var(--head); padding: 0; width: 43rem; }
+dialog { background: #000; color: var(--text); border: 1px solid var(--head); padding: 0; width: min(56rem, 92vw); }
 dialog::backdrop { background: rgba(0,0,0,.6); }
 dialog textarea { width: 100%; margin: 6px 0; color: var(--white); }
 .dlgbtns { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
@@ -144,3 +144,14 @@ dialog textarea { width: 100%; margin: 6px 0; color: var(--white); }
 
 .upd { background: #1f9d3a; color: #000; border: none; font-weight: 700; padding: 1px 8px; white-space: nowrap; }
 .upd:hover:not(:disabled) { background: #2bd44f; color: #000; }
+
+/* 导入确认 */
+.imp-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.imp-tablewrap { max-height: 50vh; overflow: auto; border: 1px solid var(--line); margin-bottom: 6px; }
+#impTable { width: 100%; border-collapse: collapse; }
+#impTable th { position: sticky; top: 0; background: #111; color: var(--muted); font-weight: normal; text-align: left; padding: 3px 6px; }
+#impTable td { padding: 2px 6px; border-top: 1px solid #141414; color: var(--white); white-space: nowrap; }
+#impTable tr.dis td { color: #666; }
+.up2 { color: var(--head); }
+button.primary { background: var(--head); color: #000; font-weight: 700; }
+button.primary:disabled { background: #3a3020; color: #777; }

@@ -262,35 +262,143 @@ $("#btnNewGroup").onclick = () => {
 };
 
 /* ---------- 导入 / 导出 ---------- */
-function parseImport(text) {
-  // 返回 {分组名: [代码...]}；TradingView 用 ###分组名 开始一个分组
-  const out = {}; let cur = state.group;
-  const tokens = text.replace(/\r/g, "").split(/[\n,;\t]+/);
-  for (let t of tokens) {
-    t = t.trim(); if (!t) continue;
-    if (t.startsWith("###")) { cur = t.slice(3).trim() || cur; continue; }
-    if (/^(代码|symbol|code|ticker)$/i.test(t)) continue;
-    const s = normSymbol(t);
-    if (s) (out[cur] = out[cur] || []).push(s);
-  }
-  return out;
+/* ---------- 导入：先解析成预览行，用户确认后才写入 ---------- */
+const MARKET_PREFIX = [[/上海|沪市|上证|SSE|SH/i, "sh"], [/深圳|深市|深证|SZSE|SZ/i, "sz"], [/北京|北交|BSE|BJ/i, "bj"],
+  [/港|HK/i, "hk"]];
+function marketName(sym) {
+  return { sh: "上海", sz: "深圳", bj: "北京", hk: "香港" }[sym.slice(0, 2)] || (sym.startsWith("yf:") ? "海外" : "");
 }
-$("#btnImport").onclick = () => { $("#importMsg").textContent = ""; $("#importDlg").showModal(); };
+
+/* 同花顺等券商软件复制出来的表格：有"证券代码"表头，制表符分隔 */
+function parseTable(text) {
+  const lines = text.replace(/\r/g, "").split("\n").filter((l) => l.trim());
+  const hi = lines.findIndex((l) => /证券代码|股票代码|代码/.test(l) && l.includes("\t"));
+  if (hi < 0) return null;
+  const head = lines[hi].split("\t").map((x) => x.trim());
+  const col = (re) => head.findIndex((h) => re.test(h));
+  const ci = col(/^(证券代码|股票代码|代码)$/), ni = col(/^(证券名称|股票名称|名称)$/), mi = col(/交易市场|市场/);
+  if (ci < 0) return null;
+  const rows = [];
+  for (const l of lines.slice(hi + 1)) {
+    const c = l.split("\t").map((x) => x.trim());
+    const code = (c[ci] || "").replace(/^'/, "");
+    if (!code) continue;
+    const name = ni >= 0 ? c[ni] || "" : "";
+    const mk = mi >= 0 ? (c[mi] || "").normalize("NFKC") : "";
+    let sym = null;
+    const pref = MARKET_PREFIX.find(([re]) => re.test(mk));
+    if (pref && /^\d+$/.test(code)) sym = pref[1] === "hk" ? "hk" + code.padStart(5, "0") : pref[1] + code.padStart(6, "0");
+    else sym = normSymbol(code);
+    rows.push({ raw: code, name, symbol: sym, group: null });
+  }
+  return { rows, source: "表格（同花顺等）" };
+}
+
+function parseImport(text) {
+  const t = parseTable(text);
+  if (t) return t;
+  // TradingView / CSV / 每行一个：TradingView 用 ###分组名 开始一个分组
+  const rows = []; let cur = null;
+  for (let tok of text.replace(/\r/g, "").split(/[\n,;\t]+/)) {
+    tok = tok.trim(); if (!tok) continue;
+    if (tok.startsWith("###")) { cur = tok.slice(3).trim() || cur; continue; }
+    if (/^(代码|symbol|code|ticker)$/i.test(tok)) continue;
+    rows.push({ raw: tok, name: "", symbol: normSymbol(tok), group: cur });
+  }
+  return { rows, source: rows.some((r) => r.group) ? "TradingView 自选" : "代码列表" };
+}
+
+let impData = null;
+$("#btnImport").onclick = () => { $("#importMsg").textContent = ""; showImpStep(1); $("#importDlg").showModal(); };
 $("#importCancel").onclick = () => $("#importDlg").close();
 $("#importFile").onchange = async (e) => {
   const f = e.target.files[0]; if (!f) return;
   let text = await f.text();
-  if (text.includes("�")) text = new TextDecoder("gbk").decode(await f.arrayBuffer()); // 国内软件导出的 GBK 文件
+  if (text.includes("�")) text = new TextDecoder("gbk").decode(await f.arrayBuffer()); // 同花顺等导出的 GBK 文件
   $("#importText").value = text;
 };
-$("#importOk").onclick = () => {
-  const parsed = parseImport($("#importText").value);
+function showImpStep(n) { $("#impStep1").style.display = n === 1 ? "" : "none"; $("#impStep2").style.display = n === 2 ? "" : "none"; }
+
+$("#importNext").onclick = () => {
+  const d = parseImport($("#importText").value);
+  if (!d.rows.length) { $("#importMsg").textContent = "没有识别到任何代码，请检查粘贴的内容"; return; }
+  // 去重（同一代码只保留第一行）
+  const seen = new Set();
+  d.rows.forEach((r) => { r.dup = r.symbol && seen.has(r.symbol); if (r.symbol) seen.add(r.symbol); r.on = !!r.symbol && !r.dup; });
+  impData = d;
+  const fileGroups = [...new Set(d.rows.map((r) => r.group).filter(Boolean))];
+  const opts = [];
+  if (fileGroups.length) opts.push(`<option value="__file">按文件中的分组（${fileGroups.join("、")}）</option>`);
+  Object.keys(state.groups).forEach((g) => opts.push(`<option value="${g}">${g}</option>`));
+  opts.push(`<option value="__new">新建分组…</option>`);
+  $("#impTarget").innerHTML = opts.join("");
+  $("#impTarget").value = fileGroups.length ? "__file" : (d.source.startsWith("表格") ? "__new" : state.group);
+  $("#impNewGroup").value = d.source.startsWith("表格") ? "同花顺持仓" : "";
+  $("#importReplace").checked = false;
+  onImpTarget();
+  showImpStep(2);
+};
+$("#impBack").onclick = () => showImpStep(1);
+function impTargetGroup(r) {
+  const v = $("#impTarget").value;
+  if (v === "__file") return r.group || state.group;
+  if (v === "__new") return $("#impNewGroup").value.trim() || "新分组";
+  return v;
+}
+function onImpTarget() { $("#impNewGroup").style.display = $("#impTarget").value === "__new" ? "" : "none"; renderImpTable(); }
+$("#impTarget").onchange = onImpTarget;
+$("#impNewGroup").oninput = renderImpTable;
+$("#importReplace").onchange = renderImpTable;
+
+function renderImpTable() {
+  if (!impData) return;
+  const replace = $("#importReplace").checked;
+  const rows = impData.rows;
+  $("#impTable tbody").innerHTML = rows.map((r, i) => {
+    const g = impTargetGroup(r);
+    const exists = r.symbol && !replace && (state.groups[g] || []).includes(r.symbol);
+    const st = !r.symbol ? '<span class="down">无法识别</span>' : r.dup ? '<span class="muted">重复</span>'
+      : exists ? '<span class="muted">已在「' + g + '」</span>' : '<span class="up2">新增 → ' + g + "</span>";
+    const dis = !r.symbol || r.dup || exists;
+    return `<tr class="${dis ? "dis" : ""}"><td><input type="checkbox" data-i="${i}" ${r.on && !dis ? "checked" : ""} ${dis ? "disabled" : ""}></td>
+      <td>${r.raw}</td><td>${r.name || (quotes[r.symbol] || {}).name || ""}</td><td>${r.symbol ? displayCode(r.symbol) : "—"}</td>
+      <td>${r.symbol ? marketName(r.symbol) : ""}</td><td>${st}</td></tr>`;
+  }).join("");
+  updateImpSummary();
+}
+$("#impTable tbody").addEventListener("change", (e) => {
+  const i = e.target.dataset.i; if (i === undefined) return;
+  impData.rows[+i].on = e.target.checked; updateImpSummary();
+});
+$("#impAll").onchange = (e) => {
+  document.querySelectorAll("#impTable tbody input:not(:disabled)").forEach((cb) => { cb.checked = e.target.checked; impData.rows[+cb.dataset.i].on = cb.checked; });
+  updateImpSummary();
+};
+function impSelected() {
+  return [...document.querySelectorAll("#impTable tbody input:checked")].map((cb) => impData.rows[+cb.dataset.i]);
+}
+function updateImpSummary() {
+  const rows = impData.rows, sel = impSelected();
+  const bad = rows.filter((r) => !r.symbol).length;
+  $("#impSummary").innerHTML = `${impData.source}：识别 ${rows.length - bad} 个${bad ? `，<span class="down">${bad} 个无法识别</span>` : ""}，已选 <b>${sel.length}</b> 个`;
+  $("#impConfirm").textContent = `确认导入 ${sel.length} 个`;
+  $("#impConfirm").disabled = !sel.length;
+}
+$("#impConfirm").onclick = () => {
+  const sel = impSelected(); if (!sel.length) return;
+  const byGroup = {};
+  sel.forEach((r) => { const g = impTargetGroup(r); (byGroup[g] = byGroup[g] || []).push(r.symbol); });
+  const replace = $("#importReplace").checked;
+  if (replace && !confirm(`将清空「${Object.keys(byGroup).join("、")}」原有内容后导入，确定吗？`)) return;
   let total = 0;
-  for (const [g, syms] of Object.entries(parsed)) {
-    if ($("#importReplace").checked && g === state.group) state.groups[g] = [];
+  for (const [g, syms] of Object.entries(byGroup)) {
+    if (replace) state.groups[g] = [];
     total += addSymbols(syms, g);
   }
-  $("#importMsg").textContent = `已导入 ${total} 个标的，分组：${Object.keys(parsed).join("、") || "无"}`;
+  const first = Object.keys(byGroup)[0];
+  state.group = first; save();
+  $("#importDlg").close();
+  toast(`已导入 ${total} 个标的到「${Object.keys(byGroup).join("、")}」`);
   renderTabs(); renderWatch(); refresh();
 };
 $("#btnExport").onclick = () => {
