@@ -6,7 +6,7 @@
  "files": {
   ".gitignore": "3c9e2e7a536e9299f197dc1e910ba49b80a85c24d0d6a4204383c85dbbc1a20f",
   "DESKTOP.md": "bb55a456db859ae318828db05c26a55bea21611dacaa61c97b9d4bfaf51bd871",
-  "README.md": "b82a18f756f8d17734cf4b41f6258aca1064b7b32a4acce70f8ad5f3aac8825c",
+  "README.md": "5bc542126ee0fcc88ab015d4a47b0c0aaad020f8e9338ccb1a9fab29892abb62",
   "desktop.py": "1be4d523838f5fb8cc77de8073eb2ac54790a1b9495ac7d07afc5e4d1660aa68",
   "news.py": "f499382851d10eaa9711616a637a66846b2208196d5050aa1059bf7ebca1dfba",
   "requirements.txt": "7484bd492aa4bc491526a79c82e053e93c403034a923e224caa381ed67a9c4ce",
@@ -19,7 +19,7 @@
   "static/news.css": "2d3ef0bddd6017c27a51f84716d5d3bdcf1f0410dc352cf32f92897cc3e36b42",
   "static/news.js": "575e28d929d15b0a72f576d6bd848eac937e5c3bd60e103298e4ea274b836de0",
   "static/style.css": "1189b1af27f3126bfca7328f35beae31c7589c76e60b86aba7624ccde2c49209",
-  "tools/release.py": "bfd3dfed35ac039d3308a3e9d5ef29436e33be67c8003741bed6277aa5cc6710",
-  "updater.py": "6a7273874da55805947715ad07e9b8e5a93c5bdb30b8a7394efcee818c87baee"
+  "tools/release.py": "42ad85105c25e919cfeb41e445375db9a28168b198d75464afee4272505bc406",
+  "updater.py": "31adacc349d7b6690ca38ea9e1313ffb4a3d04e57cab7049e0b65286ec52839b"
  }
 }

@@ -1,10 +1,11 @@
 """程序内一键更新。
 
-发布方式：代码放在 GitHub 仓库，每次发版打一个 vX.Y.Z 标签，根目录的 version.json 记录版本号和
-每个文件的 sha256（由 tools/release.py 生成）。
+发布方式：代码放在 GitHub 仓库 main 分支，根目录的 version.json 记录版本号和每个文件的 sha256
+（由 tools/release.py 生成）。推送到 main 即发布。
 
 检查更新：依次尝试 GitHub raw → jsDelivr 镜像，取 main 分支上的 version.json。
-下载更新：按 version.json 的文件清单逐个下载（先 jsDelivr 固定标签地址，国内通常更快；再 GitHub raw），
+下载更新：先查 main 最新提交的 sha，按 version.json 的文件清单逐个下载（先 jsDelivr 固定到该提交的地址，
+国内通常更快；再 GitHub raw），
 校验 sha256，全部成功后才覆盖到程序目录。自选、设置、缓存都在 %APPDATA%\\TradingBoard，不受影响。
 """
 import hashlib
@@ -94,18 +95,30 @@ def _set(status_, message="", progress=None):
             _state["progress"] = progress
 
 
-def _download_file(version, path, sha):
-    tag = "v" + version
+def resolve_ref():
+    """main 分支最新提交的 sha（不可变地址，不受 CDN 缓存影响）；查不到就退回分支名。"""
+    for u in (f"https://api.github.com/repos/{REPO}/commits/{BRANCH}",
+              f"https://data.jsdelivr.com/v1/packages/gh/{REPO}/resolved?specifier={BRANCH}"):
+        try:
+            d = json.loads(_get(u, timeout=6).decode("utf-8"))
+            sha = d.get("sha") or d.get("version")
+            if sha and len(sha) >= 7:
+                return sha
+        except Exception:  # noqa: BLE001
+            pass
+    return BRANCH
+
+
+def _download_file(ref, path, sha):
     if TEST_BASE:
         data = _get(f"{TEST_BASE}/{path}")
         if hashlib.sha256(data).hexdigest() != sha:
             raise RuntimeError(f"{path} 校验失败")
         return data
-    urls = [
-        f"https://cdn.jsdelivr.net/gh/{REPO}@{tag}/{path}",
-        f"https://raw.githubusercontent.com/{REPO}/{tag}/{path}",
-        f"https://fastly.jsdelivr.net/gh/{REPO}@{tag}/{path}",
-    ]
+    cdn = [f"https://cdn.jsdelivr.net/gh/{REPO}@{ref}/{path}", f"https://fastly.jsdelivr.net/gh/{REPO}@{ref}/{path}"]
+    raw = [f"https://raw.githubusercontent.com/{REPO}/{ref}/{path}?t={int(time.time())}"]
+    # 固定到提交 sha 时 jsDelivr 内容可靠且国内快；只有分支名时 jsDelivr 可能是旧缓存，先用 GitHub raw
+    urls = cdn + raw if ref != BRANCH else raw + cdn
     last = None
     for u in urls:
         try:
@@ -121,6 +134,8 @@ def _download_file(version, path, sha):
 def _apply(manifest, restart_cmd):
     try:
         version, files = manifest["version"], manifest["files"]
+        _set("downloading", "查询最新提交", 0)
+        ref = resolve_ref()
         staging = tempfile.mkdtemp(prefix="tb-update-")
         # 只下载有变化的文件
         todo = []
@@ -133,7 +148,7 @@ def _apply(manifest, restart_cmd):
             todo.append((path, sha))
         for i, (path, sha) in enumerate(todo):
             _set("downloading", f"下载 {path}（{i + 1}/{len(todo)}）", int(i * 90 / max(len(todo), 1)))
-            data = _download_file(version, path, sha)
+            data = _download_file(ref, path, sha)
             dst = os.path.join(staging, path)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             with open(dst, "wb") as f:

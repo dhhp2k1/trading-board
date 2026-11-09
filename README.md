@@ -32,4 +32,4 @@
 程序启动后会自动检查新版本（之后每 30 分钟一次），有新版本时顶栏出现绿色的"↑ 新版本"按钮，点一下即可自动下载、替换文件并重启。也可以在空白处右键 →"检查更新"。
 - 自选、设置、资讯翻译缓存都在 %APPDATA%\TradingBoard，更新不会影响。
 - 更新来源：GitHub 仓库 dhhp2k1/trading-board（公开），国内优先走 jsDelivr 镜像。
-- 发版（开发用）：改 server.py 里的 VERSION/BUILD → `python tools/release.py "更新说明"` → 提交并打 vX.Y.Z 标签推送。
+- 发版（开发用）：改 server.py 里的 VERSION/BUILD → `python tools/release.py "更新说明"` → 提交并推送到 main。

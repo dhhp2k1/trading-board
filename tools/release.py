@@ -1,7 +1,7 @@
 """发版：生成根目录的 version.json（版本号、构建时间、更新说明、每个文件的 sha256）。
 
 用法：python tools/release.py "这次更新的说明"
-然后：git add -A && git commit && git tag vX.Y.Z && git push && git push --tags
+然后：git add -A && git commit && git push（推送到 main 即发布，程序内会检测到新版本）
 版本号取自 server.py 里的 VERSION，发版前先改它。
 """
 import hashlib
