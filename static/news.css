@@ -1,0 +1,86 @@
+/* 资讯面板：Bloomberg 终端风格（黑底、琥珀色、等宽字体）。只作用于 #news 内部。 */
+#news {
+  --nw-bg: var(--bg, #000); --nw-amber: var(--text, #f4a81d); --nw-amber-dim: #8a5a10;
+  --nw-head: var(--head, #ff8c00); --nw-text: var(--white, #e8e8e8); --nw-muted: var(--muted, #8a7a5a);
+  --nw-line: var(--line, #2a2a2a); --nw-red: #ff3b3b; --nw-yellow: #ffe066; --nw-blue: var(--blue, #4fa3ff);
+  display: flex; flex-direction: column; background: var(--nw-bg); color: var(--nw-text);
+  flex: 1 1 0; min-height: 240px; border-top: 1px solid var(--nw-line);
+  font: 0.96rem/1.45 var(--mono, Consolas, "Cascadia Mono", "Sarasa Mono SC", "Microsoft YaHei UI", monospace);
+}
+#news.wide {
+  position: fixed; z-index: 60; top: 40px; right: 0; bottom: 28px; width: min(50rem, 92vw);
+  height: auto; margin: 0; box-shadow: -8px 0 24px rgba(0, 0, 0, .6); font-size: 1.04rem;
+}
+#news button, #news input {
+  font: inherit; border-radius: 0; background: transparent; color: var(--nw-amber);
+  border: 1px solid transparent; padding: 0 0.5em; height: 1.6rem; line-height: 1.44rem;
+}
+#news button:hover { border-color: var(--nw-amber-dim); cursor: pointer; }
+
+#news .nw-head { display: flex; align-items: center; gap: 2px; background: var(--nw-head); color: #000;
+  padding: 0 0 0 0.5rem; height: 1.6rem; flex: none; font-weight: 700; }
+#news .nw-head .pn { display: none; }
+.nw-brand { margin: 0 6px 0 4px; }
+#news .nw-head button { color: #000; font-weight: 700; height: 1.44rem; line-height: 1.28rem; }
+#news .nw-head button.on { background: #000; color: var(--nw-head); }
+#news .nw-head button:hover { border-color: #000; }
+.nw-unread { color: #b00000; }
+.nw-head button.on .nw-unread { color: var(--nw-red); }
+.nw-sp { flex: 1; }
+.nw-clock { font-variant-numeric: tabular-nums; margin-right: 4px; }
+
+.nw-bar { display: flex; align-items: center; gap: 3px; padding: 3px 4px; border-bottom: 1px solid var(--nw-line); flex: none; flex-wrap: wrap; }
+.nw-srcs { display: flex; gap: 3px; flex-wrap: wrap; }
+#news .nw-chip { color: var(--nw-muted); border-color: var(--nw-line); font-size: 0.88rem; height: 1.44rem; line-height: 1.28rem; padding: 0 0.4rem; }
+#news .nw-chip.on { color: #000; background: var(--nw-amber); border-color: var(--nw-amber); }
+#news .nw-chip.bad { text-decoration: line-through; color: var(--nw-red); }
+#news .nw-chip.bad.on { background: #5a1a12; color: var(--nw-text); border-color: var(--nw-red); }
+#news .nw-hot.on { background: var(--nw-red); border-color: var(--nw-red); color: #000; }
+.nw-sym { color: var(--nw-yellow); font-weight: 700; padding: 0 4px; }
+#news .nw-q { flex: 1; min-width: 60px; color: var(--nw-text); border: 1px solid var(--nw-line); background: #0d0d0d; height: 1.44rem; }
+#news .nw-q:focus { outline: none; border-color: var(--nw-amber-dim); }
+
+.nw-list { flex: 1; overflow-y: auto; overflow-x: hidden; }
+.nw-list::-webkit-scrollbar { width: 6px; }
+.nw-list::-webkit-scrollbar-thumb { background: #3a3122; }
+.nw-empty { color: var(--nw-muted); padding: 1rem; text-align: center; }
+
+.nw-item { display: grid; grid-template-columns: 3.2rem 3.4rem 1fr; gap: 0 4px; padding: 3px 5px; border-bottom: 1px solid #120f0a; cursor: pointer; }
+.nw-item:hover { background: var(--hl, #1a1408); }
+.nw-t { color: var(--nw-amber); font-variant-numeric: tabular-nums; }
+.nw-s { color: var(--nw-muted); font-size: 0.8rem; padding-top: 1px; overflow: hidden; }
+.nw-s.s-wscn { color: #c9a35a; } .nw-s.s-sina { color: #d98a5a; } .nw-s.s-mw { color: var(--nw-blue); }
+.nw-s.s-yahoo { color: #b48cff; }
+.nw-c { min-width: 0; }
+.nw-h { word-break: break-word; }
+.nw-b { color: var(--nw-muted); display: none; margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
+.nw-a { color: var(--nw-blue); text-decoration: none; font-size: 0.88rem; }
+.nw-acts { display: none; gap: 0.8rem; align-items: center; margin-top: 2px; }
+.nw-item.open .nw-b { display: block; }
+.nw-item.open .nw-acts { display: flex; }
+.nw-b.nw-bz { color: var(--nw-text); border-left: 2px solid var(--nw-blue); padding-left: 0.4rem; margin-bottom: 0.3rem; }
+#news .nw-trb { color: var(--nw-blue); border: 1px solid var(--nw-blue); height: 1.3rem; line-height: 1.1rem; font-size: 0.82rem; padding: 0 0.4rem; }
+#news .nw-trb:disabled { opacity: .6; cursor: wait; }
+.nw-item.open { background: var(--sel, #2a1d05); }
+
+/* 重要度：2 重要（红） / 1 关注（琥珀） */
+.nw-item.lv2 .nw-h { color: var(--nw-red); font-weight: 700; }
+.nw-item.lv2 { border-left: 2px solid var(--nw-red); padding-left: 3px; }
+.nw-item.lv1 .nw-h { color: var(--nw-amber); }
+/* 提到自选标的 */
+.nw-item.hit { background: #14120a; }
+.nw-item mark { background: transparent; color: var(--nw-yellow); border-bottom: 1px dotted var(--nw-yellow); cursor: pointer; }
+.nw-item mark:hover { background: #3a3000; }
+/* 新到条目闪一下 */
+.nw-item.new { animation: nw-flash 2.5s ease-out; }
+@keyframes nw-flash { from { background: rgba(255, 160, 40, .35); } to { background: transparent; } }
+
+.nw-foot { flex: none; color: var(--nw-muted); font-size: 0.88rem; padding: 1px 0.5rem; border-top: 1px solid var(--nw-line); height: 1.5rem; white-space: nowrap; overflow: hidden; }
+.nw-err { color: var(--nw-red); cursor: help; }
+.nw-s.s-wsj { color: #9ad0ff; }
+.nw-s.s-cls { color: #ff7a5a; } .nw-s.s-jin10 { color: #e0c341; }
+.nw-also { font-style: normal; color: var(--nw-amber-dim); margin-left: 1px; }
+/* 英文原文（显示中文翻译时） */
+.nw-o { color: var(--nw-muted); font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nw-item.open .nw-o { white-space: normal; }
+#news .nw-tr.on { color: #000; background: var(--nw-blue); border-color: var(--nw-blue); }

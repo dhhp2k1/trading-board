@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>交易看板</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="news.css">
+</head>
+<body>
+<div id="topbar">
+  <span class="logo">TB<b>TERMINAL</b></span>
+  <span id="ver" class="ver" title="版本"></span>
+  <button id="updBtn" class="upd" style="display:none" onclick="doUpdate()"></button>
+  <div class="cmd">
+    <span class="prompt">&gt;</span>
+    <input id="addInput" placeholder="输入代码或名称：600519 / 00700 / AAPL / ^N225，回车加入自选" autocomplete="off" spellcheck="false">
+    <span class="go">GO</span>
+    <div id="suggest"></div>
+  </div>
+  <div id="clocks"></div>
+</div>
+<header id="ticker"></header>
+
+<main>
+  <aside id="left" class="panel">
+    <div class="ph"><span class="pn">1</span> 自选监控 <span class="muted" id="watchCount"></span></div>
+    <div class="tabs" id="groupTabs"></div>
+    <table id="watch">
+      <thead><tr>
+        <th data-sort="name">证券</th>
+        <th data-sort="price" class="r">最新</th>
+        <th data-sort="change" class="r">涨跌</th>
+        <th data-sort="pct" class="r">涨跌%</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="leftfoot">
+      <button id="btnImport">导入</button>
+      <button id="btnExport">导出</button>
+      <button id="btnNewGroup">新分组</button>
+    </div>
+  </aside>
+
+  <section id="center" class="panel">
+    <div class="ph"><span class="pn">2</span> 图表 <span id="cName"></span><span id="cCode" class="muted"></span>
+      <span id="cPrice" class="big"></span><span id="cPct"></span></div>
+    <div class="toolbar">
+      <div class="seg" id="periods">
+        <button data-p="min">分时</button>
+        <button data-p="m1">1分</button>
+        <button data-p="m5">5分</button>
+        <button data-p="m15">15分</button>
+        <button data-p="m30">30分</button>
+        <button data-p="m60">60分</button>
+        <button data-p="day">日</button>
+        <button data-p="week">周</button>
+        <button data-p="month">月</button>
+      </div>
+      <div class="seg" id="ctypes">
+        <button data-t="candle" title="蜡烛图">蜡烛</button>
+        <button data-t="hollow" title="空心蜡烛">空心</button>
+        <button data-t="bar" title="美国线（OHLC）">美国线</button>
+        <button data-t="line" title="收盘价折线">折线</button>
+      </div>
+    </div>
+    <div id="chart"></div>
+    <div id="legend" class="muted"></div>
+  </section>
+
+  <aside id="right" class="panel">
+    <div class="ph"><span class="pn">3</span> 报价详情</div>
+    <dl id="detail"></dl>
+    <!-- 资讯面板：由"资讯"子任务在 news.js / news.css 中实现，这里只留容器 -->
+    <section id="news"></section>
+    <div class="ph"><span class="pn">4</span> 我的 Agent</div>
+    <div class="pad"><button id="btnAgent" disabled title="第 4 步接入">带上当前标的去问 Agent（待接入）</button></div>
+  </aside>
+</main>
+
+<footer>
+  <span id="status">启动中…</span>
+  <span>
+    刷新
+    <select id="interval">
+      <option value="2000">2s</option>
+      <option value="3000" selected>3s</option>
+      <option value="5000">5s</option>
+      <option value="10000">10s</option>
+    </select>
+    <label><input type="checkbox" id="redUp" checked> 红涨绿跌</label>
+  </span>
+</footer>
+
+<dialog id="importDlg">
+  <div class="ph">导入自选</div>
+  <div class="pad">
+    <p class="muted">支持：TradingView 导出的自选（.txt，如 <code>NASDAQ:AAPL,SSE:600519,###分组</code>）、
+      CSV 第一列为代码、或每行一个代码。</p>
+    <input type="file" id="importFile" accept=".txt,.csv">
+    <textarea id="importText" rows="10" placeholder="也可以直接粘贴到这里"></textarea>
+    <label><input type="checkbox" id="importReplace"> 替换当前分组（不勾选则追加）</label>
+    <div class="dlgbtns">
+      <button id="importOk">导入</button>
+      <button id="importCancel">关闭</button>
+    </div>
+    <p id="importMsg" class="muted"></p>
+  </div>
+</dialog>
+
+<script src="lightweight-charts.standalone.production.js"></script>
+<script src="app.js"></script>
+<script src="news.js" onerror="void 0"></script>
+</body>
+</html>
