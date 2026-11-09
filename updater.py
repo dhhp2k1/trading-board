@@ -115,10 +115,13 @@ def _download_file(ref, path, sha):
         if hashlib.sha256(data).hexdigest() != sha:
             raise RuntimeError(f"{path} 校验失败")
         return data
-    cdn = [f"https://cdn.jsdelivr.net/gh/{REPO}@{ref}/{path}", f"https://fastly.jsdelivr.net/gh/{REPO}@{ref}/{path}"]
-    raw = [f"https://raw.githubusercontent.com/{REPO}/{ref}/{path}?t={int(time.time())}"]
-    # 固定到提交 sha 时 jsDelivr 内容可靠且国内快；只有分支名时 jsDelivr 可能是旧缓存，先用 GitHub raw
-    urls = cdn + raw if ref != BRANCH else raw + cdn
+    def cdn(r):
+        return [f"https://cdn.jsdelivr.net/gh/{REPO}@{r}/{path}", f"https://fastly.jsdelivr.net/gh/{REPO}@{r}/{path}"]
+
+    def raw(r):
+        return [f"https://raw.githubusercontent.com/{REPO}/{r}/{path}?t={int(time.time())}"]
+    # 固定到提交 sha 时 jsDelivr 内容可靠且国内快；sha 可能因 API 缓存略旧，校验不过就再试分支最新内容
+    urls = (cdn(ref) + raw(ref) if ref != BRANCH else []) + raw(BRANCH) + cdn(BRANCH)
     last = None
     for u in urls:
         try:
