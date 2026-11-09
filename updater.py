@@ -43,19 +43,24 @@ def _vtuple(v):
 
 
 def fetch_manifest():
-    """取最新的 version.json。jsDelivr 的分支地址可能有缓存，所以先 GitHub raw。"""
-    t = int(time.time())
+    """取最新的 version.json：先查 main 的最新提交 sha，再按 sha 取（不可变地址，避免 CDN 旧缓存）。"""
     if TEST_BASE:
         return json.loads(_get(f"{TEST_BASE}/version.json").decode("utf-8"))
-    urls = [
-        f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/version.json?t={t}",
-        f"https://cdn.jsdelivr.net/gh/{REPO}@{BRANCH}/version.json",
-        f"https://fastly.jsdelivr.net/gh/{REPO}@{BRANCH}/version.json",
-    ]
+    ref = resolve_ref()
+    t = int(time.time())
+    urls = []
+    if ref != BRANCH:
+        urls += [f"https://raw.githubusercontent.com/{REPO}/{ref}/version.json",
+                 f"https://cdn.jsdelivr.net/gh/{REPO}@{ref}/version.json",
+                 f"https://fastly.jsdelivr.net/gh/{REPO}@{ref}/version.json"]
+    urls += [f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/version.json?t={t}",
+             f"https://cdn.jsdelivr.net/gh/{REPO}@{BRANCH}/version.json"]
     errors = []
     for u in urls:
         try:
-            return json.loads(_get(u).decode("utf-8"))
+            m = json.loads(_get(u).decode("utf-8"))
+            m["_ref"] = ref if f"/{ref}/" in u or f"@{ref}/" in u else BRANCH
+            return m
         except Exception as e:  # noqa: BLE001
             errors.append(f"{u.split('/')[2]}: {e}")
     raise RuntimeError("；".join(errors))
@@ -137,8 +142,7 @@ def _download_file(ref, path, sha):
 def _apply(manifest, restart_cmd):
     try:
         version, files = manifest["version"], manifest["files"]
-        _set("downloading", "查询最新提交", 0)
-        ref = resolve_ref()
+        ref = manifest.get("_ref") or BRANCH
         staging = tempfile.mkdtemp(prefix="tb-update-")
         # 只下载有变化的文件
         todo = []
