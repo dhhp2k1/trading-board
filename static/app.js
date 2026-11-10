@@ -592,8 +592,15 @@ function renderChart(d, fit) {
   if ((quotes[s] || {}).fundType || /^(sh5|sz1)/.test(s))   // 场内基金 / 债券报价到 0.001
     mainSeries.applyOptions({ priceFormat: { type: "price", precision: 3, minMove: 0.001 } });
   iopvLine = null;
-  if (isIntraday(state.period) && (quotes[s] || {}).iopv && state.showIopv !== false)
+  if ((quotes[s] || {}).iopv && state.showIopv !== false) {
     iopvLine = mainSeries.createPriceLine({ price: quotes[s].iopv, color: "#3ee6e6", lineStyle: 1, lineWidth: 1, title: "IOPV" });
+    // 跨境 ETF 溢价常有 10% 以上，IOPV 线会落在可视范围外：让纵轴自动把 IOPV 也包含进来
+    if (isIntraday(state.period)) mainSeries.applyOptions({ autoscaleInfoProvider: (orig) => {
+      const r = orig(), v = (quotes[state.selected] || {}).iopv;
+      if (!r || !r.priceRange || !v || state.showIopv === false) return r;
+      return { priceRange: { minValue: Math.min(r.priceRange.minValue, v), maxValue: Math.max(r.priceRange.maxValue, v) }, margins: r.margins };
+    } });
+  }
   if (intraday) {
     const prevClose = d.prevClose || (quotes[s] || {}).prevClose;
     if (prevClose) mainSeries.createPriceLine({ price: prevClose, color: "#8a7a5a", lineStyle: 2, lineWidth: 1, title: "昨收" });
@@ -1245,7 +1252,7 @@ $("#chart").addEventListener("contextmenu", (e) => {
       action: () => { state.ctype = t; save(); setSeg("#ctypes", "t", t); rr(); } })) },
     { label: "显示均线", checked: state.showMA !== false, action: () => { state.showMA = state.showMA === false; save(); rr(); } },
     { label: "显示成交量", checked: state.showVol !== false, action: () => { state.showVol = state.showVol === false; save(); rr(); } },
-    { label: "显示 IOPV 线（ETF 日内）", checked: state.showIopv !== false, action: () => { state.showIopv = state.showIopv === false; save(); rr(); } },
+    { label: "显示 IOPV 线（ETF）", checked: state.showIopv !== false, action: () => { state.showIopv = state.showIopv === false; save(); rr(); } },
     { label: "对数坐标", checked: !!state.logScale, action: () => { state.logScale = !state.logScale; save(); rr(); } },
     "-",
     { label: "保存截图", action: () => {
@@ -1313,3 +1320,39 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "F5") { e.preventDefault(); refresh(); klineCache.delete(kkey(state.selected, state.period)); loadChart(false); toast("已刷新"); }
   if (e.key === "Home" && !e.target.closest("input, textarea")) chart.timeScale().scrollToRealTime();
 });
+
+/* ---------- 自选栏宽度：拖动左栏右边缘调整整栏宽度，拖动“证券”表头右边缘调整名称列宽度；双击恢复默认 ---------- */
+function applyLayout() {
+  const m = document.querySelector("main");
+  if (state.leftW) m.style.setProperty("--leftW", state.leftW + "px"); else m.style.removeProperty("--leftW");
+  $("#watch").style.setProperty("--nameCol", (state.nameCol || 40) + "%");
+}
+function dragger(el, onMove, onReset) {
+  el.addEventListener("mousedown", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    document.body.classList.add("resizing");
+    const move = (ev) => onMove(ev);
+    const up = () => { document.removeEventListener("mousemove", move); document.removeEventListener("mouseup", up);
+      document.body.classList.remove("resizing"); save(); };
+    document.addEventListener("mousemove", move); document.addEventListener("mouseup", up);
+  });
+  el.addEventListener("dblclick", (e) => { e.stopPropagation(); onReset(); applyLayout(); save(); });
+  el.addEventListener("click", (e) => e.stopPropagation());
+}
+(() => {
+  const left = $("#left");
+  const sp = document.createElement("div"); sp.className = "vsplit"; sp.title = "拖动调整自选栏宽度，双击恢复默认";
+  left.appendChild(sp);
+  dragger(sp, (ev) => {
+    const x = ev.clientX - left.getBoundingClientRect().left;
+    state.leftW = Math.round(Math.max(220, Math.min(window.innerWidth * 0.45, x))); applyLayout();
+  }, () => { state.leftW = null; });
+  const th = $("#watch thead th");
+  const cs = document.createElement("span"); cs.className = "colsplit"; cs.title = "拖动调整名称列宽度，双击恢复默认";
+  th.appendChild(cs);
+  dragger(cs, (ev) => {
+    const r = $("#watch").getBoundingClientRect();
+    state.nameCol = Math.round(Math.max(25, Math.min(75, (ev.clientX - r.left) / r.width * 100))); applyLayout();
+  }, () => { state.nameCol = null; });
+  applyLayout();
+})();

@@ -50,7 +50,7 @@ code { background: #1a1408; padding: 0 4px; }
 .tk .p small { font-size: 0.88rem; }
 
 /* 三栏 */
-main { flex: 1; display: grid; grid-template-columns: 27rem 1fr 25.6rem; min-height: 0; gap: 1px; background: var(--line); }
+main { flex: 1; display: grid; grid-template-columns: var(--leftW, 27rem) minmax(0, 1fr) 25.6rem; min-height: 0; gap: 1px; background: var(--line); }
 .panel { background: var(--panel); min-height: 0; display: flex; flex-direction: column; }
 .ph { background: var(--head); color: var(--head-text); padding: 1px 6px; font-weight: 700;
   display: flex; align-items: baseline; gap: 8px; white-space: nowrap; overflow: hidden; }
@@ -69,10 +69,10 @@ main { flex: 1; display: grid; grid-template-columns: 27rem 1fr 25.6rem; min-hei
 #watch thead, #watch tbody tr { display: table; width: 100%; table-layout: fixed; }
 #watch th { color: var(--muted); font-weight: normal; padding: 3px 6px; cursor: pointer; text-align: left;
   border-bottom: 1px solid var(--line); }
-#watch th:first-child { width: 40%; }
+#watch th:first-child { width: var(--nameCol, 40%); position: relative; }
 #watch th.r { text-align: right; }
 #watch td { padding: 3px 6px; border-bottom: 1px solid #111; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#watch td:first-child { width: 40%; color: var(--white); }
+#watch td:first-child { width: var(--nameCol, 40%); color: var(--white); }
 #watch tr { cursor: pointer; }
 #watch tbody tr:hover { background: var(--hl); }
 #watch tr.sel { background: var(--sel); }
@@ -136,7 +136,7 @@ dialog textarea { width: 100%; margin: 6px 0; color: var(--white); }
 /* 面板编号徽标没有实际用途，隐藏 */
 .ph .pn { display: none; }
 /* 窗口太窄时收起右栏，再窄收起左栏 */
-@media (max-width: 1100px) { main { grid-template-columns: 24rem 1fr; } #right { display: none; } }
+@media (max-width: 1100px) { main { grid-template-columns: var(--leftW, 24rem) minmax(0, 1fr); } #right { display: none; } }
 @media (max-width: 760px) { main { grid-template-columns: 1fr; } #left { display: none; } }
 #zoomtip { position: fixed; right: 12px; top: 40px; background: var(--head); color: #000; padding: 2px 10px; font-weight: 700;
   opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 102; }
@@ -193,3 +193,11 @@ button.danger:hover:not(:disabled) { background: #ff3b3b; color: #000; }
 #watch td .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #watch td .ext { flex: none; }
 #watch td .prem { opacity: .9; }
+
+/* 拖动调整宽度 */
+#left { position: relative; }
+.vsplit { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 10; }
+.vsplit:hover, body.resizing .vsplit { background: rgba(255,140,0,.35); }
+.colsplit { position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: col-resize; }
+.colsplit:hover { background: rgba(255,140,0,.35); }
+body.resizing { cursor: col-resize; user-select: none; }
