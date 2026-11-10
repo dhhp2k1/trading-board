@@ -19,6 +19,7 @@ const DEFAULT_STATE = {
   sort: null,
 };
 
+const MINI = new URLSearchParams(location.search).has("mini");   // 桌面小窗
 let state = load();
 let quotes = {};
 let timer = null;
@@ -27,7 +28,11 @@ function load() {
   try { return Object.assign(structuredClone(DEFAULT_STATE), JSON.parse(localStorage.getItem(LS_KEY))); }
   catch { return structuredClone(DEFAULT_STATE); }
 }
-function save() { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+function save() {
+  // 小窗和主窗口共用同一份设置：小窗只读，避免两边互相覆盖（小窗自己的选项单独存）
+  if (MINI) { localStorage.setItem(LS_KEY + ":mini", JSON.stringify({ group: state.group, pin: state.pin })); return; }
+  localStorage.setItem(LS_KEY, JSON.stringify(state));
+}
 
 /* ---------- 代码识别：把各种写法统一成内部代码 ---------- */
 const TV_INDEX = {
@@ -764,6 +769,7 @@ function renderChart(d, fit) {
 }
 
 async function loadChart(fit = true) {
+  if (MINI) return;
   const s = state.selected, p = state.period; if (!s) return;
   const k = kkey(s, p);
   if (k !== shownKey) fit = true;           // 换了标的或周期，一定重新定位视野
@@ -1487,3 +1493,58 @@ function dragger(el, onMove, onReset) {
 
 if (state.showPrem === false) { state.look = Object.assign(look(), { prem: false }); delete state.showPrem; save(); }
 applyLook();
+
+/* ---------- 桌面小窗：置顶、无边框的迷你自选 ---------- */
+const desk = () => (window.pywebview && window.pywebview.api) || null;
+$("#btnMini").onclick = () => {
+  if (desk()) return desk().open_mini();
+  window.open("/?mini=1", "tb-mini", "width=340,height=560");   // 浏览器版：普通弹出窗口
+};
+if (MINI) {
+  document.body.classList.add("mini");
+  document.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopImmediatePropagation(); }, true);
+  document.title = "交易看板 · 小窗";
+  try { Object.assign(state, JSON.parse(localStorage.getItem(LS_KEY + ":mini")) || {}); } catch (_) { /* 无 */ }
+  if (!state.groups[state.group]) state.group = Object.keys(state.groups)[0];
+  const fillGroups = () => {
+    $("#miniGroup").innerHTML = Object.keys(state.groups).map((g) => `<option ${g === state.group ? "selected" : ""}>${g}</option>`).join("");
+  };
+  fillGroups();
+  $("#miniGroup").onchange = (e) => { state.group = e.target.value; save(); renderWatch(); refresh(); };
+  // 主窗口改了自选 / 外观，小窗跟着更新
+  window.addEventListener("storage", (e) => {
+    if (e.key !== LS_KEY) return;
+    const g = state.group, pin = state.pin;
+    state = Object.assign(load(), { group: g, pin });
+    if (!state.groups[state.group]) state.group = Object.keys(state.groups)[0];
+    fillGroups(); applyLook(); renderWatch(); refresh();
+  });
+  // 点小窗里的标的：让主窗口切过去
+  $("#watch tbody").addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-s]"); if (!tr || e.target.dataset.del) return;
+    e.stopImmediatePropagation();
+    if (desk()) desk().select_in_main(tr.dataset.s);
+    else if (window.opener && window.opener.board) window.opener.board.select(tr.dataset.s);
+  }, true);
+  const pinUI = () => $("#miniPin").classList.toggle("on", state.pin !== false);
+  pinUI();
+  $("#miniPin").onclick = () => { state.pin = state.pin === false; save(); pinUI(); if (desk()) desk().mini_on_top(state.pin !== false); };
+  $("#miniMain").onclick = () => desk() && desk().show_main();
+  $("#miniClose").onclick = () => (desk() ? desk().close_mini() : window.close());
+  setInterval(() => { $("#miniClock").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false }); }, 1000);
+  window.addEventListener("pywebviewready", () => desk() && desk().mini_on_top(state.pin !== false));
+  // 无边框窗口没有系统边框可拉：右下角拖动手柄改大小
+  $("#miniGrip").addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    const sx = e.screenX, sy = e.screenY, w0 = window.outerWidth, h0 = window.outerHeight;
+    let pend = null;
+    const mv = (ev) => {
+      const w = w0 + ev.screenX - sx, h = h0 + ev.screenY - sy;
+      if (pend) { pend = [w, h]; return; }
+      pend = [w, h];
+      setTimeout(() => { const [pw, ph] = pend; pend = null; if (desk()) desk().mini_resize(pw, ph); else window.resizeTo(pw, ph); }, 40);
+    };
+    const up = () => { document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); };
+    document.addEventListener("mousemove", mv); document.addEventListener("mouseup", up);
+  });
+}

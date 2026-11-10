@@ -3,13 +3,15 @@
 <head>
 <meta charset="utf-8">
 <title>交易看板</title>
+<link rel="icon" href="img/logo.svg" type="image/svg+xml">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="news.css">
 </head>
 <body>
 <div id="topbar">
-  <span class="logo">TB<b>TERMINAL</b></span>
+  <span class="logo"><img src="img/logo.svg" alt="">TB<b>TERMINAL</b></span>
+  <button id="btnMini" class="minibtn" title="打开桌面小窗（置顶的迷你自选）">▣ 小窗</button>
   <span id="ver" class="ver" title="版本"></span>
   <button id="updBtn" class="upd" style="display:none" onclick="doUpdate()"></button>
   <div class="cmd">
@@ -25,8 +27,19 @@
 <main>
   <aside id="left" class="panel">
     <div class="ph"><span class="pn">1</span> 自选监控 <span class="muted" id="watchCount"></span></div>
+    <div id="miniBar" class="pywebview-drag-region">
+      <img src="img/logo.svg" alt="" class="pywebview-drag-region">
+      <select id="miniGroup"></select>
+      <span id="miniClock" class="pywebview-drag-region"></span>
+      <span class="mb">
+        <button id="miniPin" title="窗口置顶">📌</button>
+        <button id="miniMain" title="打开主窗口">⤢</button>
+        <button id="miniClose" title="关闭小窗">✕</button>
+      </span>
+    </div>
     <div class="tabs" id="groupTabs"></div>
     <div id="heat"></div>
+    <div id="miniGrip" title="拖动调整小窗大小"></div>
     <table id="watch">
       <thead><tr>
         <th data-sort="name">证券</th>

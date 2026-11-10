@@ -307,3 +307,33 @@ body.wl-dense #watch td.spk svg.sp { height: 1.7rem; }
   #watch th.pct, #watch td.pct { width: 5.4rem; }
   #watch td, #watch th { padding-left: 4px; padding-right: 4px; }
 }
+
+/* ===== Logo ===== */
+.logo { display: inline-flex; align-items: center; gap: 2px; }
+.logo img { width: 1.35rem; height: 1.35rem; margin-right: 5px; }
+.minibtn { padding: 0 8px; white-space: nowrap; }
+
+/* ===== 桌面小窗 ===== */
+#miniBar { display: none; }
+body.mini #topbar, body.mini #ticker, body.mini #center, body.mini #right, body.mini footer,
+body.mini .leftfoot, body.mini #left > .ph, body.mini #groupTabs, body.mini .vsplit { display: none !important; }
+body.mini main { grid-template-columns: 1fr !important; }
+body.mini #left { display: flex !important; }
+body.mini #miniBar { display: flex; align-items: center; gap: 6px; padding: 3px 4px 3px 8px; background: var(--panel);
+  border-bottom: 1px solid var(--line); user-select: none; cursor: move; }
+body.mini #miniBar img { width: 16px; height: 16px; }
+body.mini #miniBar select { padding: 0 4px; max-width: 9rem; cursor: pointer; }
+body.mini #miniClock { color: var(--muted); font-variant-numeric: tabular-nums; flex: 1; }
+body.mini #miniBar .mb { display: flex; gap: 2px; }
+body.mini #miniBar .mb button { border: none; background: none; padding: 0 6px; color: var(--muted); cursor: pointer; }
+body.mini #miniBar .mb button:hover { color: var(--white); background: var(--hl); }
+body.mini #miniBar .mb button.on { color: var(--head); }
+body.mini #miniClose:hover { background: #c42b1c !important; color: #fff !important; }
+body.mini { border: 1px solid var(--line); }
+body.mini #watch td.nmc .rng { display: none; }
+body.mini #watch thead { display: none; }
+body.mini #ovLegend, body.mini #lookPop { display: none !important; }
+body.mini #watch td .del { display: none !important; }
+#miniGrip { display: none; }
+body.mini #miniGrip { display: block; position: fixed; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; z-index: 50;
+  background: linear-gradient(135deg, transparent 50%, var(--muted) 50%, var(--muted) 60%, transparent 60%, transparent 72%, var(--muted) 72%, var(--muted) 82%, transparent 82%); opacity: .7; }
