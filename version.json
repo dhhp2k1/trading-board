@@ -1,7 +1,7 @@
 {
- "version": "0.5.3",
- "build": "2026-11-10 10:35",
- "notes": "新增曲线叠加：图表工具栏「＋叠加」可把指数/个股走势按涨跌幅叠加到主图对比（最多 5 个）",
+ "version": "0.5.4",
+ "build": "2026-11-10 10:40",
+ "notes": "ETF/LOF 显示 IOPV、溢价率、昨日净值；自选列表显示溢价率，日内图表显示 IOPV 参考线；场内基金价格精确到 0.001",
  "requirements_changed": false,
  "files": {
   ".gitignore": "3c9e2e7a536e9299f197dc1e910ba49b80a85c24d0d6a4204383c85dbbc1a20f",
@@ -10,15 +10,15 @@
   "desktop.py": "1be4d523838f5fb8cc77de8073eb2ac54790a1b9495ac7d07afc5e4d1660aa68",
   "news.py": "f499382851d10eaa9711616a637a66846b2208196d5050aa1059bf7ebca1dfba",
   "requirements.txt": "7484bd492aa4bc491526a79c82e053e93c403034a923e224caa381ed67a9c4ce",
-  "server.py": "5356568fdef3efd92638d4551f4d8802994f4e1537d7442a9650f1561165b758",
+  "server.py": "d52317d3ceec1b8a391ec8f19d6b3cabf58f84d0c51cc768dad3dd10bca5b55a",
   "start.bat": "b4d7168880a9b7c247d550415cadfba24abddff7321f201189f24b7b378e954b",
-  "static/app.js": "2cac89fa564f181879a185cb94f9430eb90919d3c40b52280afe7fa6f0946899",
+  "static/app.js": "2348e778da9bedd07ffeea039977b949f1339496bbf16c5f3bfd783cf81e9f6e",
   "static/index.html": "3a9bc1ca691f2e0e06bb173e4d3642b7f6c41e15d7b81081f3e71b6d517963b7",
   "static/lightweight-charts.LICENSE": "70c9d5382506dd184465425c08a99ad9bd6d9ac1313c252968ba0b585e5ef823",
   "static/lightweight-charts.standalone.production.js": "e21cc5caa0226ef30bd8549c50b9ef926615f2a4ee6b4e486353477a55f598cf",
   "static/news.css": "2d3ef0bddd6017c27a51f84716d5d3bdcf1f0410dc352cf32f92897cc3e36b42",
   "static/news.js": "575e28d929d15b0a72f576d6bd848eac937e5c3bd60e103298e4ea274b836de0",
-  "static/style.css": "05e48d9db8a05beb52f482116323f3deabf7508201addfc986a6a241b84077c8",
+  "static/style.css": "eec2e5a2581602dfe0644f79eafb0ff976a8a147c381c831bd3ba322c9b53582",
   "tools/release.py": "42ad85105c25e919cfeb41e445375db9a28168b198d75464afee4272505bc406",
   "updater.py": "938efdef1d3eac75896bc45355d76c08cc518fee9b90a10356adcd9e56c29409"
  }

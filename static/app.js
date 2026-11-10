@@ -183,6 +183,10 @@ function extTag(q) {
   return ` <span class="ext ${cls(q.ext.pct)}" title="${q.ext.label} ${fmt(q.ext.price)}（${q.ext.time}）">${q.ext.label}${pctStr(q.ext.pct)}</span>`;
 }
 
+function premTag(q) {
+  if (q.premium == null) return "";
+  return ` <span class="ext prem ${cls(q.premium)}" title="${q.iopv ? "IOPV " + fmt(q.iopv, 4) + "，" : ""}溢价率 ${pctStr(q.premium)}">溢${pctStr(q.premium)}</span>`;
+}
 function renderWatch(prev = {}) {
   let list = [...(state.groups[state.group] || [])];
   if (state.sort) {
@@ -200,7 +204,7 @@ function renderWatch(prev = {}) {
     const flash = p && q.price != null && p.price != null && q.price !== p.price
       ? (q.price > p.price ? "flash-up" : "flash-down") : "";
     return `<tr data-s="${s}" class="${s === state.selected ? "sel" : ""} ${flash}">
-      <td title="${displayCode(s)}">${q.name || (q.error ? "⚠ " : "") + displayCode(s)}<span class="code">${displayCode(s)}</span>${extTag(q)}</td>
+      <td title="${displayCode(s)}"><div class="cell"><span class="nm">${q.name || (q.error ? "⚠ " : "") + displayCode(s)}<span class="code">${displayCode(s)}</span></span>${extTag(q)}${state.showPrem !== false ? premTag(q) : ""}</div></td>
       <td class="r ${cls(q.pct)}">${fmt(q.price)}</td>
       <td class="r ${cls(q.pct)}">${q.change == null ? "—" : (q.change > 0 ? "+" : "") + fmt(q.change)}</td>
       <td class="r ${cls(q.pct)}"><span class="del" data-del="${s}" title="移出自选">✕</span>${pctStr(q.pct)}</td></tr>`;
@@ -507,7 +511,7 @@ const chart = LW.createChart($("#chart"), {
   localization: { locale: "zh-CN" },
 });
 let series = [];
-let mainSeries = null, chartData = null;
+let mainSeries = null, chartData = null, iopvLine = null;
 function colors() {
   return state.redUp ? { up: "#ff3b3b", down: "#26d07c" } : { up: "#26d07c", down: "#ff3b3b" };
 }
@@ -584,6 +588,11 @@ function renderChart(d, fit) {
     mainSeries = addPriceSeries(d);
   }
   series.push(mainSeries);
+  if ((quotes[s] || {}).fundType || /^(sh5|sz1)/.test(s))   // 场内基金 / 债券报价到 0.001
+    mainSeries.applyOptions({ priceFormat: { type: "price", precision: 3, minMove: 0.001 } });
+  iopvLine = null;
+  if (isIntraday(state.period) && (quotes[s] || {}).iopv && state.showIopv !== false)
+    iopvLine = mainSeries.createPriceLine({ price: quotes[s].iopv, color: "#3ee6e6", lineStyle: 1, lineWidth: 1, title: "IOPV" });
   if (intraday) {
     const prevClose = d.prevClose || (quotes[s] || {}).prevClose;
     if (prevClose) mainSeries.createPriceLine({ price: prevClose, color: "#8a7a5a", lineStyle: 2, lineWidth: 1, title: "昨收" });
@@ -896,6 +905,8 @@ document.addEventListener("click", (e) => { if (!e.target.closest("#ovl")) $("#o
 
 /* 日/周/月 K 线的最后一根随实时报价更新，不必整张图重载 */
 function patchLastBar() {
+  const qq = quotes[state.selected] || {};
+  if (iopvLine && qq.iopv) iopvLine.applyOptions({ price: qq.iopv });
   if (!chartData || chartData.type !== "candle" || !mainSeries) return;
   if (!["day", "week", "month"].includes(state.period)) return;
   const q = quotes[state.selected]; if (!q || q.price == null) return;
@@ -964,6 +975,13 @@ function renderDetail() {
   if (q.ext) rows.splice(3, 0, [q.ext.label + "价", `<span class="${cls(q.ext.pct)}">${fmt(q.ext.price)} ${pctStr(q.ext.pct)}</span>`],
     [q.ext.label + "时间", q.ext.time]);
   if (s.startsWith("yf:")) rows.push(["美股时段", SESSION_NAME[usSession()]]);
+  if (q.fundType) {
+    const fr = [];
+    if (q.iopv) fr.push(["IOPV", `<span title="实时参考净值（交易所每 15 秒左右发布）">${fmt(q.iopv, 4)}</span>`]);
+    if (q.premium != null) fr.push([q.iopv ? "溢价率" : "溢价率(对昨净值)", `<span class="${cls(q.premium)}">${pctStr(q.premium)}</span>`]);
+    if (q.nav) fr.push(["单位净值(昨)", fmt(q.nav, 4)]);
+    rows.splice(8, 0, ...fr);
+  }
   $("#detail").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") +
     (q.error ? `<dt>错误</dt><dd class="down">${q.error}</dd>` : "");
 }
@@ -1181,6 +1199,7 @@ $("#left").addEventListener("contextmenu", (e) => {
     { label: "导入自选…", action: () => $("#btnImport").click() },
     { label: "导出自选", action: () => $("#btnExport").click() },
     "-",
+    { label: "显示 ETF 溢价率", checked: state.showPrem !== false, action: () => { state.showPrem = state.showPrem === false; save(); renderWatch(); } },
     { label: "排序", sub: [
       { label: "涨跌幅 从高到低", checked: state.sort && state.sort.key === "pct" && state.sort.dir === -1, action: () => sortBy("pct", -1) },
       { label: "涨跌幅 从低到高", checked: state.sort && state.sort.key === "pct" && state.sort.dir === 1, action: () => sortBy("pct", 1) },
@@ -1217,6 +1236,7 @@ $("#chart").addEventListener("contextmenu", (e) => {
       action: () => { state.ctype = t; save(); setSeg("#ctypes", "t", t); rr(); } })) },
     { label: "显示均线", checked: state.showMA !== false, action: () => { state.showMA = state.showMA === false; save(); rr(); } },
     { label: "显示成交量", checked: state.showVol !== false, action: () => { state.showVol = state.showVol === false; save(); rr(); } },
+    { label: "显示 IOPV 线（ETF 日内）", checked: state.showIopv !== false, action: () => { state.showIopv = state.showIopv === false; save(); rr(); } },
     { label: "对数坐标", checked: !!state.logScale, action: () => { state.logScale = !state.logScale; save(); rr(); } },
     "-",
     { label: "保存截图", action: () => {

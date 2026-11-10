@@ -20,8 +20,8 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 版本戳：每次发版改这里。顶栏会显示，桌面启动器也用它判断后台跑的是不是旧版本
-VERSION = "0.5.3"
-BUILD = "2026-11-10 10:35"
+VERSION = "0.5.4"
+BUILD = "2026-11-10 10:40"
 
 PORT = int(os.environ.get("BOARD_PORT", "8765"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -90,6 +90,16 @@ def tencent_quotes(codes):
                 "time": ts,
                 "source": "腾讯",
             }
+            # 场内基金：腾讯第 77/78/81 项分别是 溢价率%、实时 IOPV（参考净值）、上一交易日单位净值
+            if len(body) > 81 and body[61] in ("ETF", "LOF"):
+                q = out[code]
+                q["fundType"] = body[61]
+                q["iopv"] = fnum(body[78]) or None
+                q["nav"] = fnum(body[81]) or None
+                prem = fnum(body[77]) if body[77].strip() else None
+                if prem is None and price and (q["iopv"] or q["nav"]):
+                    prem = (price / (q["iopv"] or q["nav"]) - 1) * 100
+                q["premium"] = prem
     return out
 
 

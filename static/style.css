@@ -187,3 +187,9 @@ button.danger:hover:not(:disabled) { background: #ff3b3b; color: #000; }
   pointer-events: none; font-size: 0.92rem; color: var(--white); }
 #ovLegend i { margin-right: 5px; vertical-align: middle; }
 #ovLegend b { font-weight: normal; margin-left: 6px; }
+
+/* 名称过长时只截名称，盘前盘后 / 溢价率标签始终可见 */
+#watch td .cell { display: flex; align-items: baseline; min-width: 0; }
+#watch td .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#watch td .ext { flex: none; }
+#watch td .prem { opacity: .9; }
