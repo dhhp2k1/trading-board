@@ -261,6 +261,87 @@ $("#btnNewGroup").onclick = () => {
   state.groups[n] = []; state.group = n; save(); renderTabs(); renderWatch();
 };
 
+/* ---------- 整理自选：批量勾选删除 / 移动 / 清空 ---------- */
+let mgSel = new Set(), mgLast = -1;
+function mgList() { return state.groups[$("#mgGroup").value] || []; }
+function mgBadSym(s) { const q = quotes[s]; return !q || q.error || (q.price == null && !q.name); }
+async function openManage(group = state.group) {
+  $("#mgGroup").innerHTML = Object.keys(state.groups).map((g) => `<option value="${g}">${g}（${state.groups[g].length}）</option>`).join("");
+  $("#mgGroup").value = group; mgSel = new Set(); mgLast = -1;
+  $("#manageDlg").showModal(); renderManage();
+  await mgFetch();
+}
+async function mgFetch() {
+  const need = mgList().filter((s) => !quotes[s]);
+  if (!need.length) return;
+  $("#mgSummary").textContent = "正在获取行情…";
+  for (let i = 0; i < need.length; i += 60) {   // 分批查，免得地址过长
+    try {
+      const d = await (await fetch("/api/quotes?s=" + encodeURIComponent(need.slice(i, i + 60).join(",")))).json();
+      Object.assign(quotes, d);
+    } catch (e) { /* 查不到的会显示为无行情 */ }
+  }
+  need.forEach((s) => { if (!quotes[s]) quotes[s] = { error: "无数据" }; });
+  renderManage();
+}
+function renderManage() {
+  const list = mgList();
+  const bad = list.filter(mgBadSym).length;
+  $("#mgTable tbody").innerHTML = list.map((s, i) => {
+    const q = quotes[s] || {}, b = quotes[s] && mgBadSym(s);
+    const others = Object.keys(state.groups).filter((g) => g !== $("#mgGroup").value && state.groups[g].includes(s));
+    return `<tr data-i="${i}" class="${mgSel.has(s) ? "on" : ""}"><td><input type="checkbox" ${mgSel.has(s) ? "checked" : ""}></td>
+      <td>${q.name || "—"}</td><td>${displayCode(s)}</td><td class="r ${cls(q.pct)}">${fmt(q.price)}</td>
+      <td>${!quotes[s] ? '<span class="muted">…</span>' : b ? '<span class="down">无行情，可能是错误代码</span>' : others.length ? `<span class="muted">也在「${others.join("、")}」</span>` : ""}</td></tr>`;
+  }).join("") || '<tr><td colspan="5" class="muted" style="padding:12px">这个分组是空的</td></tr>';
+  $("#mgSummary").innerHTML = `共 ${list.length} 个${bad ? `，<span class="down">${bad} 个无行情</span>` : ""}，已选 <b>${mgSel.size}</b> 个`;
+  $("#mgDel").textContent = `删除所选（${mgSel.size}）`;
+  $("#mgDel").disabled = $("#mgMove").disabled = !mgSel.size;
+  $("#mgClear").disabled = !list.length;
+}
+$("#btnManage").onclick = () => openManage();
+$("#mgClose").onclick = () => $("#manageDlg").close();
+$("#manageDlg").addEventListener("close", () => { renderTabs(); renderWatch(); refresh(); });
+$("#mgGroup").onchange = () => { mgSel = new Set(); mgLast = -1; $("#mgMoveTo").style.display = "none"; renderManage(); mgFetch(); };
+$("#mgTable tbody").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr[data-i]"); if (!tr) return;
+  const list = mgList(), i = +tr.dataset.i, on = !mgSel.has(list[i]);
+  const [a, b] = e.shiftKey && mgLast >= 0 ? [Math.min(mgLast, i), Math.max(mgLast, i)] : [i, i];
+  for (let k = a; k <= b; k++) on ? mgSel.add(list[k]) : mgSel.delete(list[k]);
+  mgLast = i; renderManage();
+});
+$("#mgAll").onclick = () => { mgSel = new Set(mgList()); renderManage(); };
+$("#mgNone").onclick = () => { mgSel = new Set(); renderManage(); };
+$("#mgInv").onclick = () => { mgSel = new Set(mgList().filter((s) => !mgSel.has(s))); renderManage(); };
+$("#mgBad").onclick = () => { mgSel = new Set(mgList().filter((s) => quotes[s] && mgBadSym(s))); renderManage();
+  if (!mgSel.size) toast("没有无行情的代码"); };
+$("#mgDel").onclick = () => {
+  const g = $("#mgGroup").value;
+  if (!confirm(`从「${g}」删除选中的 ${mgSel.size} 个标的？`)) return;
+  state.groups[g] = state.groups[g].filter((s) => !mgSel.has(s));
+  toast(`已删除 ${mgSel.size} 个`); mgSel = new Set(); save(); openManage(g);
+};
+$("#mgClear").onclick = () => {
+  const g = $("#mgGroup").value;
+  if (!confirm(`清空分组「${g}」里的全部 ${state.groups[g].length} 个标的？`)) return;
+  state.groups[g] = []; mgSel = new Set(); save(); openManage(g);
+};
+$("#mgMove").onclick = () => {
+  const g = $("#mgGroup").value, sel = $("#mgMoveTo");
+  sel.innerHTML = '<option value="">选择目标分组…</option>' + Object.keys(state.groups).filter((x) => x !== g)
+    .map((x) => `<option value="${x}">${x}</option>`).join("") + '<option value="__new">新建分组…</option>';
+  sel.style.display = ""; sel.focus();
+};
+$("#mgMoveTo").onchange = (e) => {
+  let to = e.target.value; if (!to) return;
+  const g = $("#mgGroup").value;
+  if (to === "__new") { to = (prompt("新分组名称") || "").trim(); if (!to) return; state.groups[to] = state.groups[to] || []; }
+  const moved = mgList().filter((s) => mgSel.has(s));
+  state.groups[g] = state.groups[g].filter((s) => !mgSel.has(s));
+  moved.forEach((s) => { if (!state.groups[to].includes(s)) state.groups[to].push(s); });
+  toast(`已移动 ${moved.length} 个到「${to}」`); mgSel = new Set(); save(); e.target.style.display = "none"; openManage(g);
+};
+
 /* ---------- 导入 / 导出 ---------- */
 /* ---------- 导入：先解析成预览行，用户确认后才写入 ---------- */
 const MARKET_PREFIX = [[/上海|沪市|上证|SSE|SH/i, "sh"], [/深圳|深市|深证|SZSE|SZ/i, "sz"], [/北京|北交|BSE|BJ/i, "bj"],
@@ -745,6 +826,7 @@ async function checkUpdate(manual) {
   try {
     const r = await (await fetch("/api/update/check" + (manual ? "?force=1" : ""))).json();
     if (r.error) throw new Error(r.error);
+    $("#ver").classList.remove("updfail"); $("#ver").title = "";
     updInfo = r;
     const btn = $("#updBtn");
     if (r.available) {
@@ -753,7 +835,10 @@ async function checkUpdate(manual) {
       btn.style.display = "none";
       if (manual) toast(`已是最新版本 v${r.current}`);
     }
-  } catch (e) { if (manual) toast("检查更新失败：" + e.message); }
+  } catch (e) {
+    if (manual) toast("检查更新失败：" + e.message);
+    const v = $("#ver"); v.title = "检查更新失败：" + e.message + "\n右键 → 检查更新 可重试"; v.classList.add("updfail");
+  }
 }
 setInterval(() => checkUpdate(false), 30 * 60 * 1000);   // 每 30 分钟查一次
 
@@ -912,6 +997,7 @@ $("#left").addEventListener("contextmenu", (e) => {
       { label: "自定义顺序", checked: !state.sort, action: () => sortBy(null) },
     ] },
     "-",
+    { label: "整理自选（批量删除/移动）…", action: () => openManage() },
     { label: "新建分组…", action: () => $("#btnNewGroup").click() },
     { label: `重命名「${state.group}」…`, action: () => { const n = prompt("新名称", state.group); if (!n || n === state.group || state.groups[n]) return;
       state.groups[n] = state.groups[state.group]; delete state.groups[state.group]; state.group = n; save(); renderTabs(); renderWatch(); } },

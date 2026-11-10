@@ -42,6 +42,12 @@ def _vtuple(v):
         return (0,)
 
 
+def _cdn(ref, path):
+    """jsDelivr 的几个入口：国内 cdn.jsdelivr.net 常被干扰，其余入口通常能用。"""
+    return [f"https://{h}/gh/{REPO}@{ref}/{path}"
+            for h in ("fastly.jsdelivr.net", "gcore.jsdelivr.net", "testingcf.jsdelivr.net", "cdn.jsdelivr.net")]
+
+
 def fetch_manifest():
     """取最新的 version.json：先查 main 的最新提交 sha，再按 sha 取（不可变地址，避免 CDN 旧缓存）。"""
     if TEST_BASE:
@@ -50,15 +56,13 @@ def fetch_manifest():
     t = int(time.time())
     urls = []
     if ref != BRANCH:
-        urls += [f"https://raw.githubusercontent.com/{REPO}/{ref}/version.json",
-                 f"https://cdn.jsdelivr.net/gh/{REPO}@{ref}/version.json",
-                 f"https://fastly.jsdelivr.net/gh/{REPO}@{ref}/version.json"]
+        urls += [f"https://raw.githubusercontent.com/{REPO}/{ref}/version.json"] + _cdn(ref, "version.json")
     urls += [f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/version.json?t={t}",
-             f"https://cdn.jsdelivr.net/gh/{REPO}@{BRANCH}/version.json"]
+             f"https://github.com/{REPO}/raw/{BRANCH}/version.json"] + _cdn(BRANCH, "version.json")
     errors = []
     for u in urls:
         try:
-            m = json.loads(_get(u).decode("utf-8"))
+            m = json.loads(_get(u, timeout=5).decode("utf-8"))
             m["_ref"] = ref if f"/{ref}/" in u or f"@{ref}/" in u else BRANCH
             return m
         except Exception as e:  # noqa: BLE001
@@ -121,10 +125,11 @@ def _download_file(ref, path, sha):
             raise RuntimeError(f"{path} 校验失败")
         return data
     def cdn(r):
-        return [f"https://cdn.jsdelivr.net/gh/{REPO}@{r}/{path}", f"https://fastly.jsdelivr.net/gh/{REPO}@{r}/{path}"]
+        return _cdn(r, path)
 
     def raw(r):
-        return [f"https://raw.githubusercontent.com/{REPO}/{r}/{path}?t={int(time.time())}"]
+        return [f"https://raw.githubusercontent.com/{REPO}/{r}/{path}?t={int(time.time())}",
+                f"https://github.com/{REPO}/raw/{r}/{path}"]
     # 固定到提交 sha 时 jsDelivr 内容可靠且国内快；sha 可能因 API 缓存略旧，校验不过就再试分支最新内容
     urls = (cdn(ref) + raw(ref) if ref != BRANCH else []) + raw(BRANCH) + cdn(BRANCH)
     last = None

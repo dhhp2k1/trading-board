@@ -1,7 +1,7 @@
 {
- "version": "0.5.1",
- "build": "2026-11-09 16:05",
- "notes": "支持从同花顺持仓/自选表格导入，导入前先预览确认",
+ "version": "0.5.2",
+ "build": "2026-11-10 09:55",
+ "notes": "新增「整理自选」：批量勾选删除/移动/清空，可一键选中无行情的错误代码；更新检查增加国内可用的下载镜像，检查失败会在版本号旁提示",
  "requirements_changed": false,
  "files": {
   ".gitignore": "3c9e2e7a536e9299f197dc1e910ba49b80a85c24d0d6a4204383c85dbbc1a20f",
@@ -10,16 +10,16 @@
   "desktop.py": "1be4d523838f5fb8cc77de8073eb2ac54790a1b9495ac7d07afc5e4d1660aa68",
   "news.py": "f499382851d10eaa9711616a637a66846b2208196d5050aa1059bf7ebca1dfba",
   "requirements.txt": "7484bd492aa4bc491526a79c82e053e93c403034a923e224caa381ed67a9c4ce",
-  "server.py": "2597a95a0a2bde969a87bb9db0c95280413be228dd3a89d7157e443f9c10a739",
+  "server.py": "4207b6bf1df6bd00c4beba6ca020d0a5cb949281d89c330a1711d1002d8c933f",
   "start.bat": "b4d7168880a9b7c247d550415cadfba24abddff7321f201189f24b7b378e954b",
-  "static/app.js": "29a85a5c330b58c186056c6ae1a45b440d51beb7ac726d5cea90189062d36f98",
-  "static/index.html": "adcbbb09e51beccff407ac34c3f9ac9790276eae9b121d81dc57751683e94418",
+  "static/app.js": "623b0e1c859f83a63c91c1c37c9ee388799f59b10f47cde35e716d9e80e1d789",
+  "static/index.html": "6c26a66eb4dc4f47744bdb6cd37757897d7ebb3804995d2b4e38b03e029dde26",
   "static/lightweight-charts.LICENSE": "70c9d5382506dd184465425c08a99ad9bd6d9ac1313c252968ba0b585e5ef823",
   "static/lightweight-charts.standalone.production.js": "e21cc5caa0226ef30bd8549c50b9ef926615f2a4ee6b4e486353477a55f598cf",
   "static/news.css": "2d3ef0bddd6017c27a51f84716d5d3bdcf1f0410dc352cf32f92897cc3e36b42",
   "static/news.js": "575e28d929d15b0a72f576d6bd848eac937e5c3bd60e103298e4ea274b836de0",
-  "static/style.css": "685bf5a93338823969c60c64f714557da6024d9924febfa936861b5cc0e3d49b",
+  "static/style.css": "7ca9662a3c59e41d6b8d7ff26d81e6f61eee670c42e1550253620c9e1bbc6e4f",
   "tools/release.py": "42ad85105c25e919cfeb41e445375db9a28168b198d75464afee4272505bc406",
-  "updater.py": "bf61fec28106dbe047765ecb3fb4ac48e5095bc54505dd037b35b9eeb02330dd"
+  "updater.py": "938efdef1d3eac75896bc45355d76c08cc518fee9b90a10356adcd9e56c29409"
  }
 }

@@ -39,6 +39,7 @@
       <button id="btnImport">导入</button>
       <button id="btnExport">导出</button>
       <button id="btnNewGroup">新分组</button>
+      <button id="btnManage">整理</button>
     </div>
   </aside>
 
@@ -92,6 +93,31 @@
   </span>
 </footer>
 
+<dialog id="manageDlg">
+  <div class="ph">整理自选</div>
+  <div class="pad">
+    <div class="imp-head">
+      <span>分组 <select id="mgGroup"></select> <span id="mgSummary" class="muted"></span></span>
+      <span class="seg">
+        <button id="mgAll">全选</button><button id="mgNone">全不选</button><button id="mgInv">反选</button><button id="mgBad">选中无行情的</button>
+      </span>
+    </div>
+    <div class="imp-tablewrap">
+      <table id="mgTable">
+        <thead><tr><th></th><th>名称</th><th>代码</th><th class="r">最新</th><th>状态</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="dlgbtns">
+      <span class="muted" style="margin-right:auto">点击行可勾选，按住 Shift 可连选</span>
+      <button id="mgMove">移动到…</button>
+      <select id="mgMoveTo" style="display:none"></select>
+      <button id="mgDel" class="danger">删除所选</button>
+      <button id="mgClear" class="danger">清空本分组</button>
+      <button id="mgClose">完成</button>
+    </div>
+  </div>
+</dialog>
 <dialog id="importDlg">
   <div class="ph">导入自选</div>
   <div class="pad" id="impStep1">

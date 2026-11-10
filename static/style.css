@@ -155,3 +155,13 @@ dialog textarea { width: 100%; margin: 6px 0; color: var(--white); }
 .up2 { color: var(--head); }
 button.primary { background: var(--head); color: #000; font-weight: 700; }
 button.primary:disabled { background: #3a3020; color: #777; }
+
+/* 整理自选 */
+#mgTable { width: 100%; border-collapse: collapse; }
+#mgTable th { position: sticky; top: 0; background: #111; color: var(--muted); font-weight: normal; text-align: left; padding: 3px 6px; }
+#mgTable td { padding: 2px 6px; border-top: 1px solid #141414; color: var(--white); white-space: nowrap; cursor: pointer; user-select: none; }
+#mgTable tr.on td { background: var(--sel); }
+#mgTable tr:hover td { background: var(--hl); }
+button.danger { color: #ff6b6b; border-color: #5a2020; }
+button.danger:hover:not(:disabled) { background: #ff3b3b; color: #000; }
+.ver.updfail::after { content: " · 检查更新失败"; color: #ff6b6b; }
