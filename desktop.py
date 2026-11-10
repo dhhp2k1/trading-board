@@ -175,11 +175,11 @@ def set_window_icon(window, title):
             return
         u = ctypes.windll.user32
         u.LoadImageW.restype = ctypes.c_void_p
-        u.SendMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p]
+        u.PostMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p]
         for kind, size in ((1, 256), (0, 32)):  # ICON_BIG / ICON_SMALL
             h = u.LoadImageW(None, ICON, 1, size, size, 0x10)  # IMAGE_ICON, LR_LOADFROMFILE
             if h:
-                u.SendMessageW(hwnd, 0x80, kind, h)  # WM_SETICON
+                u.PostMessageW(hwnd, 0x80, kind, h)  # WM_SETICON（异步，不等界面线程）
     except Exception:  # noqa: BLE001
         log("set_window_icon failed:\n" + traceback.format_exc())
 
@@ -212,74 +212,108 @@ def ensure_shortcuts():
 
 # ---------------- 小窗模式 ----------------
 # 小窗不是第二个窗口：同一个窗口原地缩成置顶的迷你自选，再切回来恢复原来的大小和位置。
-# （v0.7.0 开第二个 WebView2 窗口在部分机器上会卡死，所以改成这样。）
-MINI_DEFAULT = {"width": 340, "height": 560, "x": None, "y": None}
+# 注意：不能用 pywebview 的 window.on_top / resize / restore —— 它们会在网页回调的工作线程里直接改
+# WinForms 窗体属性（跨线程），在 Windows 上会把界面卡死（v0.7.0 / v0.7.1 的问题）。
+# 这里一律用 Win32 的异步调用（SetWindowPos + SWP_ASYNCWINDOWPOS、ShowWindowAsync），不会阻塞界面线程。
+MINI_W, MINI_H = 340, 560   # 逻辑像素，按屏幕缩放换算
+SWP_NOSIZE, SWP_NOMOVE, SWP_NOZORDER, SWP_NOACTIVATE, SWP_ASYNC = 0x1, 0x2, 0x4, 0x10, 0x4000
+HWND_TOPMOST, HWND_NOTOPMOST = -1, -2
+
+
+def _u32():
+    import ctypes
+    from ctypes import wintypes
+    u = ctypes.windll.user32
+    u.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+    u.ShowWindowAsync.argtypes = [wintypes.HWND, ctypes.c_int]
+    u.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    u.IsZoomed.argtypes = [wintypes.HWND]
+    return u
+
+
+def _rect(hwnd):
+    import ctypes
+    from ctypes import wintypes
+    r = wintypes.RECT()
+    _u32().GetWindowRect(hwnd, ctypes.byref(r))
+    return {"x": r.left, "y": r.top, "w": r.right - r.left, "h": r.bottom - r.top}
+
+
+def _scale(hwnd):
+    try:
+        import ctypes
+        return max(1.0, ctypes.windll.user32.GetDpiForWindow(hwnd) / 96.0)
+    except Exception:  # noqa: BLE001
+        return 1.0
 
 
 class Desk:
     """网页里通过 window.pywebview.api 调用。属性都用下划线开头，pywebview 不会把它们暴露给网页。"""
 
     def __init__(self):
-        self._win = None
+        self._hwnd = None
         self._mini = False
-        self._normal = None      # 进入小窗前主界面的位置大小
-        self._mini_geo = None    # 小窗的位置大小（记住）
+        self._normal = None      # 进入小窗前：物理像素位置大小 + 是否最大化
         self._mini_file = None
-        self._live = None        # 主界面实时记录的位置大小（make_main_window 里维护）
-        self._flags = None
+        self._lock = threading.Lock()
 
-    def _load_mini_geo(self):
+    def _load_mini(self):
         try:
             with open(self._mini_file, encoding="utf-8") as f:
-                g = dict(MINI_DEFAULT, **json.load(f))
-            if g["x"] is not None and not on_screen(int(g["x"]), int(g["y"]), g["width"], g["height"]):
-                g["x"] = g["y"] = None
+                g = json.load(f)
+            if all(k in g for k in ("x", "y", "w", "h")) and on_screen(g["x"], g["y"], g["w"], g["h"]):
+                return g
         except (OSError, ValueError, TypeError):
-            g = dict(MINI_DEFAULT)
-        if g["x"] is None and sys.platform == "win32":  # 默认放在屏幕右上角
-            import ctypes
-            sw = ctypes.windll.user32.GetSystemMetrics(0)
-            g["x"], g["y"] = sw - g["width"] - 24, 80
-        return g
+            pass
+        sc = _scale(self._hwnd)
+        import ctypes
+        sw = ctypes.windll.user32.GetSystemMetrics(0)
+        w, h = int(MINI_W * sc), int(MINI_H * sc)
+        return {"x": sw - w - int(24 * sc), "y": int(80 * sc), "w": w, "h": h}
 
-    def is_mini(self):
-        return self._mini
+    def _apply(self, on, pin):
+        with self._lock:
+            hwnd, u = self._hwnd, _u32()
+            if not hwnd or bool(on) == self._mini:
+                return
+            try:
+                if on:
+                    zoomed = bool(u.IsZoomed(hwnd))
+                    if zoomed:
+                        u.ShowWindowAsync(hwnd, 9)  # SW_RESTORE
+                        time.sleep(0.15)
+                    self._normal = dict(_rect(hwnd), maximized=zoomed)
+                    g = self._load_mini()
+                    self._mini = True
+                    u.SetWindowPos(hwnd, HWND_TOPMOST if pin else HWND_NOTOPMOST, g["x"], g["y"], g["w"], g["h"],
+                                   SWP_NOACTIVATE | SWP_ASYNC)
+                else:
+                    save_json(self._mini_file, _rect(hwnd))
+                    self._mini = False
+                    n = self._normal
+                    if n:
+                        u.SetWindowPos(hwnd, HWND_NOTOPMOST, n["x"], n["y"], n["w"], n["h"], SWP_NOACTIVATE | SWP_ASYNC)
+                        if n.get("maximized"):
+                            u.ShowWindowAsync(hwnd, 3)  # SW_MAXIMIZE
+                    else:
+                        u.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNC)
+                        u.ShowWindowAsync(hwnd, 3)
+            except Exception:  # noqa: BLE001
+                log("set_mini failed:\n" + traceback.format_exc())
 
-    def set_on_top(self, on):
-        try:
-            self._win.on_top = bool(on)
-        except Exception:  # noqa: BLE001
-            log("set_on_top failed:\n" + traceback.format_exc())
+    # ---- 给网页调用：都立刻返回，真正的窗口操作在后台线程里异步做 ----
+    def set_mini(self, on, pin=True):
+        if sys.platform == "win32":
+            threading.Thread(target=self._apply, args=(bool(on), bool(pin)), daemon=True).start()
         return True
 
-    def set_mini(self, on, pin=True):
-        w = self._win
-        if w is None or bool(on) == self._mini:
-            return self._mini
-        try:
-            if on:
-                self._normal = dict(self._live)
-                self._normal["maximized"] = self._flags["maximized"]
-                if self._flags["maximized"]:
-                    w.restore()
-                g = self._mini_geo or self._load_mini_geo()
-                self._mini = True
-                w.resize(int(g["width"]), int(g["height"]))
-                if g["x"] is not None:
-                    w.move(int(g["x"]), int(g["y"]))
-                w.on_top = bool(pin)
-            else:
-                save_json(self._mini_file, self._mini_geo or {})
-                self._mini = False
-                w.on_top = False
-                n = self._normal or load_state()
-                w.resize(int(n["width"]), int(n["height"]))
-                if n.get("x") is not None:
-                    w.move(int(n["x"]), int(n["y"]))
-                if n.get("maximized"):
-                    w.maximize()
-        except Exception:  # noqa: BLE001
-            log("set_mini failed:\n" + traceback.format_exc())
+    def set_on_top(self, on):
+        if sys.platform == "win32" and self._hwnd and self._mini:
+            _u32().SetWindowPos(self._hwnd, HWND_TOPMOST if on else HWND_NOTOPMOST, 0, 0, 0, 0,
+                                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNC)
+        return True
+
+    def is_mini(self):
         return self._mini
 
 
@@ -402,39 +436,24 @@ def make_main_window(desk, start_mini=False):
     import webview
     state = load_state()
     url = f"http://{HOST}:{PORT}/" + ("?mini=1" if start_mini else "")
-    if start_mini:
-        g = desk._load_mini_geo()
-        desk._mini, desk._mini_geo = True, dict(g)
-        state_w = dict(state, width=g["width"], height=g["height"], x=g["x"], y=g["y"], maximized=False)
-    else:
-        state_w = state
+    state_w = state
     window = webview.create_window(
         TITLE, url,
         width=state_w["width"], height=state_w["height"], x=state_w["x"], y=state_w["y"],
-        min_size=(240, 200), maximized=state_w["maximized"], on_top=start_mini,
+        min_size=(240, 200), maximized=state_w["maximized"],
         background_color="#000000", text_select=True, js_api=desk,
     )
-    desk._win = window
 
     # 只在“正常”状态下记录尺寸，最大化 / 最小化时不覆盖
     live = dict(state)
     flags = {"maximized": state_w["maximized"], "minimized": False}
-    desk._live, desk._flags = live, flags
 
     def on_resized(width, height):
-        if flags["minimized"]:
-            return
-        if desk._mini:
-            desk._mini_geo = dict(desk._mini_geo or MINI_DEFAULT, width=width, height=height)
-        elif not flags["maximized"]:
+        if not flags["maximized"] and not flags["minimized"] and not desk._mini:
             live["width"], live["height"] = max(MIN_W, width), max(MIN_H, height)
 
     def on_moved(x, y):
-        if flags["minimized"] or x <= -10000:
-            return
-        if desk._mini:
-            desk._mini_geo = dict(desk._mini_geo or MINI_DEFAULT, x=x, y=y)
-        elif not flags["maximized"]:
+        if not flags["maximized"] and not flags["minimized"] and not desk._mini and x > -10000:
             live["x"], live["y"] = x, y
 
     def on_maximized():
@@ -451,15 +470,30 @@ def make_main_window(desk, start_mini=False):
             flags["maximized"] = False
 
     def on_closing():
-        if desk._mini:  # 在小窗状态下关闭：记住小窗位置，主界面位置保持进入小窗前的
-            save_json(desk._mini_file, desk._mini_geo or {})
+        if desk._mini:  # 在小窗状态下关闭：记住小窗位置；主界面的位置大小保持进入小窗前的
+            try:
+                save_json(desk._mini_file, _rect(desk._hwnd))
+            except Exception:  # noqa: BLE001
+                pass
             if desk._normal:
-                save_state({k: desk._normal[k] for k in ("width", "height", "x", "y", "maximized")})
+                live["maximized"] = desk._normal.get("maximized", False)
+            save_state(live)
             return
         live["maximized"] = flags["maximized"]
         save_state(live)
 
-    window.events.shown += lambda: (style_title_bar(window), set_window_icon(window, TITLE))
+    def on_shown():
+        style_title_bar(window)
+        set_window_icon(window, TITLE)
+        if sys.platform == "win32":
+            try:
+                desk._hwnd = hwnd_of(window, TITLE)
+            except Exception:  # noqa: BLE001
+                pass
+            if start_mini:
+                desk.set_mini(True, True)
+
+    window.events.shown += on_shown
     window.events.resized += on_resized
     window.events.moved += on_moved
     window.events.maximized += on_maximized
