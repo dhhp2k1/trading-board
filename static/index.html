@@ -11,12 +11,12 @@
 <body>
 <div id="topbar">
   <span class="logo"><img src="img/logo.svg" alt="">TB<b>TERMINAL</b></span>
-  <button id="btnMini" class="minibtn" title="打开桌面小窗（置顶的迷你自选）">▣ 小窗</button>
+  <button id="btnMini" class="minibtn" title="切换成置顶的迷你自选小窗（可随时切回）">▣ 小窗</button>
   <span id="ver" class="ver" title="版本"></span>
   <button id="updBtn" class="upd" style="display:none" onclick="doUpdate()"></button>
   <div class="cmd">
     <span class="prompt">&gt;</span>
-    <input id="addInput" placeholder="输入代码或名称：600519 / 00700 / AAPL / ^N225，回车加入自选" autocomplete="off" spellcheck="false">
+    <input id="addInput" placeholder="输入代码或名称：600519 / 00700 / AAPL / ^N225，回车查看" autocomplete="off" spellcheck="false">
     <span class="go">GO</span>
     <div id="suggest"></div>
   </div>
@@ -33,13 +33,11 @@
       <span id="miniClock" class="pywebview-drag-region"></span>
       <span class="mb">
         <button id="miniPin" title="窗口置顶">📌</button>
-        <button id="miniMain" title="打开主窗口">⤢</button>
-        <button id="miniClose" title="关闭小窗">✕</button>
+        <button id="miniMain" title="切回完整界面">⤢ 完整界面</button>
       </span>
     </div>
     <div class="tabs" id="groupTabs"></div>
     <div id="heat"></div>
-    <div id="miniGrip" title="拖动调整小窗大小"></div>
     <table id="watch">
       <thead><tr>
         <th data-sort="name">证券</th>
@@ -59,7 +57,7 @@
 
   <section id="center" class="panel">
     <div class="ph"><span class="pn">2</span> 图表 <span id="cName"></span><span id="cCode" class="muted"></span>
-      <span id="cPrice" class="big"></span><span id="cPct"></span></div>
+      <span id="cPrice" class="big"></span><span id="cPct"></span><button id="cAdd" title="加入当前分组">＋ 加自选</button></div>
     <div class="toolbar">
       <div class="seg" id="periods">
         <button data-p="min">分时</button>

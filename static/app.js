@@ -19,7 +19,7 @@ const DEFAULT_STATE = {
   sort: null,
 };
 
-const MINI = new URLSearchParams(location.search).has("mini");   // 桌面小窗
+let MINI = new URLSearchParams(location.search).has("mini");   // 小窗模式（同一窗口原地切换）
 let state = load();
 let quotes = {};
 let timer = null;
@@ -28,11 +28,7 @@ function load() {
   try { return Object.assign(structuredClone(DEFAULT_STATE), JSON.parse(localStorage.getItem(LS_KEY))); }
   catch { return structuredClone(DEFAULT_STATE); }
 }
-function save() {
-  // 小窗和主窗口共用同一份设置：小窗只读，避免两边互相覆盖（小窗自己的选项单独存）
-  if (MINI) { localStorage.setItem(LS_KEY + ":mini", JSON.stringify({ group: state.group, pin: state.pin })); return; }
-  localStorage.setItem(LS_KEY, JSON.stringify(state));
-}
+function save() { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 
 /* ---------- 代码识别：把各种写法统一成内部代码 ---------- */
 const TV_INDEX = {
@@ -374,23 +370,36 @@ $("#addInput").addEventListener("input", (e) => {
     try {
       const r = await (await fetch("/api/search?q=" + encodeURIComponent(q))).json();
       if (!Array.isArray(r) || !r.length) { $("#suggest").style.display = "none"; return; }
-      $("#suggest").innerHTML = r.map((x) => `<div data-s="${x.symbol}">${x.name} <span class="muted">${displayCode(x.symbol)}</span></div>`).join("");
+      const cur = state.groups[state.group] || [];
+      $("#suggest").innerHTML = r.map((x) => `<div data-s="${x.symbol}" class="${cur.includes(x.symbol) ? "in" : ""}"><span class="sn">${x.name} <span class="muted">${displayCode(x.symbol)}</span></span><span class="sadd" title="加入「${state.group}」">${cur.includes(x.symbol) ? "已在自选" : "＋自选"}</span></div>`).join("");
       $("#suggest").style.display = "block";
     } catch { /* 搜索失败时忽略，回车仍可按代码添加 */ }
   }, 250);
 });
 $("#suggest").addEventListener("click", (e) => {
   const d = e.target.closest("div[data-s]"); if (!d) return;
-  addSymbols([d.dataset.s]); $("#addInput").value = ""; $("#suggest").style.display = "none";
-  renderTabs(); select(d.dataset.s);
+  const s = d.dataset.s;
+  if (e.target.closest(".sadd")) {   // 只有点「＋自选」才加入分组
+    if (addSymbols([s])) toast(`已加入「${state.group}」`); else toast("已在当前分组");
+    renderTabs(); renderWatch(); refresh();
+    d.classList.add("in"); return;
+  }
+  $("#addInput").value = ""; $("#suggest").style.display = "none";
+  select(s);                        // 搜索 = 打开图表看看，不加自选
 });
 $("#addInput").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { $("#suggest").style.display = "none"; return; }
   if (e.key !== "Enter") return;
-  const s = normSymbol(e.target.value);
+  const first = $("#suggest").style.display === "block" && $("#suggest div[data-s]");
+  const s = normSymbol(e.target.value) || (first && first.dataset.s);
   if (!s) return;
-  addSymbols([s]); e.target.value = ""; $("#suggest").style.display = "none";
-  renderTabs(); select(s);
+  e.target.value = ""; $("#suggest").style.display = "none";
+  select(s);
 });
+$("#cAdd").onclick = () => {
+  const s = state.selected; if (!s) return;
+  addSymbols([s]); toast(`已加入「${state.group}」`); renderTabs(); renderWatch(); renderDetail(); refresh();
+};
 
 $("#btnNewGroup").onclick = () => {
   const n = prompt("新分组名称"); if (!n || state.groups[n]) return;
@@ -1108,6 +1117,7 @@ window.board = {
 function renderDetail() {
   const s = state.selected; const q = quotes[s] || {};
   $("#cName").textContent = q.name || displayCode(s);
+  $("#cAdd").classList.toggle("show", !!s && !(state.groups[state.group] || []).includes(s));
   $("#cCode").textContent = displayCode(s);
   $("#cPrice").textContent = fmt(q.price); $("#cPrice").className = "big";
   $("#cPct").textContent = q.change != null ? `${q.change > 0 ? "+" : ""}${fmt(q.change)}  ${pctStr(q.pct)}` : "";
@@ -1494,57 +1504,42 @@ function dragger(el, onMove, onReset) {
 if (state.showPrem === false) { state.look = Object.assign(look(), { prem: false }); delete state.showPrem; save(); }
 applyLook();
 
-/* ---------- 桌面小窗：置顶、无边框的迷你自选 ---------- */
+/* ---------- 小窗模式：同一个窗口原地缩成置顶的迷你自选，再切回完整界面 ---------- */
 const desk = () => (window.pywebview && window.pywebview.api) || null;
-$("#btnMini").onclick = () => {
-  if (desk()) return desk().open_mini();
-  window.open("/?mini=1", "tb-mini", "width=340,height=560");   // 浏览器版：普通弹出窗口
-};
-if (MINI) {
-  document.body.classList.add("mini");
-  document.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopImmediatePropagation(); }, true);
-  document.title = "交易看板 · 小窗";
-  try { Object.assign(state, JSON.parse(localStorage.getItem(LS_KEY + ":mini")) || {}); } catch (_) { /* 无 */ }
-  if (!state.groups[state.group]) state.group = Object.keys(state.groups)[0];
-  const fillGroups = () => {
-    $("#miniGroup").innerHTML = Object.keys(state.groups).map((g) => `<option ${g === state.group ? "selected" : ""}>${g}</option>`).join("");
-  };
-  fillGroups();
-  $("#miniGroup").onchange = (e) => { state.group = e.target.value; save(); renderWatch(); refresh(); };
-  // 主窗口改了自选 / 外观，小窗跟着更新
-  window.addEventListener("storage", (e) => {
-    if (e.key !== LS_KEY) return;
-    const g = state.group, pin = state.pin;
-    state = Object.assign(load(), { group: g, pin });
-    if (!state.groups[state.group]) state.group = Object.keys(state.groups)[0];
-    fillGroups(); applyLook(); renderWatch(); refresh();
-  });
-  // 点小窗里的标的：让主窗口切过去
-  $("#watch tbody").addEventListener("click", (e) => {
-    const tr = e.target.closest("tr[data-s]"); if (!tr || e.target.dataset.del) return;
-    e.stopImmediatePropagation();
-    if (desk()) desk().select_in_main(tr.dataset.s);
-    else if (window.opener && window.opener.board) window.opener.board.select(tr.dataset.s);
-  }, true);
-  const pinUI = () => $("#miniPin").classList.toggle("on", state.pin !== false);
-  pinUI();
-  $("#miniPin").onclick = () => { state.pin = state.pin === false; save(); pinUI(); if (desk()) desk().mini_on_top(state.pin !== false); };
-  $("#miniMain").onclick = () => desk() && desk().show_main();
-  $("#miniClose").onclick = () => (desk() ? desk().close_mini() : window.close());
-  setInterval(() => { $("#miniClock").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false }); }, 1000);
-  window.addEventListener("pywebviewready", () => desk() && desk().mini_on_top(state.pin !== false));
-  // 无边框窗口没有系统边框可拉：右下角拖动手柄改大小
-  $("#miniGrip").addEventListener("mousedown", (e) => {
-    e.preventDefault();
-    const sx = e.screenX, sy = e.screenY, w0 = window.outerWidth, h0 = window.outerHeight;
-    let pend = null;
-    const mv = (ev) => {
-      const w = w0 + ev.screenX - sx, h = h0 + ev.screenY - sy;
-      if (pend) { pend = [w, h]; return; }
-      pend = [w, h];
-      setTimeout(() => { const [pw, ph] = pend; pend = null; if (desk()) desk().mini_resize(pw, ph); else window.resizeTo(pw, ph); }, 40);
-    };
-    const up = () => { document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); };
-    document.addEventListener("mousemove", mv); document.addEventListener("mouseup", up);
-  });
+function fillMiniGroups() {
+  $("#miniGroup").innerHTML = Object.keys(state.groups).map((g) => `<option ${g === state.group ? "selected" : ""}>${g}</option>`).join("");
 }
+function setMini(on) {
+  MINI = on;
+  document.body.classList.toggle("mini", on);
+  document.title = on ? "交易看板 · 小窗" : "交易看板";
+  history.replaceState(null, "", on ? "/?mini=1" : "/");
+  if (on) { fillMiniGroups(); pinUI(); }
+  if (desk()) desk().set_mini(on, state.pin !== false);
+  else if (on) toast("浏览器里无法缩小窗口，请用桌面版");
+  if (!on) { applyLayout(); loadChart(true); renderTabs(); }
+  renderWatch();
+}
+function pinUI() { $("#miniPin").classList.toggle("on", state.pin !== false); }
+$("#btnMini").onclick = () => setMini(true);
+$("#miniMain").onclick = () => setMini(false);
+$("#miniGroup").onchange = (e) => { state.group = e.target.value; save(); renderTabs(); renderWatch(); refresh(); };
+$("#miniPin").onclick = () => { state.pin = state.pin === false; save(); pinUI(); if (desk()) desk().set_on_top(state.pin !== false); };
+// 小窗里双击标的：回到完整界面并打开它的图表
+// 小窗里双击标的回到完整界面。单击会重绘列表，浏览器的 dblclick 不可靠，所以自己判断两次点击间隔
+let miniLast = { s: null, t: 0 };
+$("#watch").addEventListener("mousedown", (e) => {
+  if (!MINI) return;
+  const tr = e.target.closest("tr[data-s]"); if (!tr) return;
+  const now = Date.now(), s = tr.dataset.s;
+  if (miniLast.s === s && now - miniLast.t < 450) { miniLast = { s: null, t: 0 }; setMini(false); select(s); return; }
+  miniLast = { s, t: now };
+}, true);
+setInterval(() => { if (MINI) $("#miniClock").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false }); }, 1000);
+if (MINI) {
+  document.body.classList.add("mini"); document.title = "交易看板 · 小窗"; fillMiniGroups(); pinUI();
+  window.addEventListener("pywebviewready", () => desk() && desk().set_on_top(state.pin !== false));
+}
+// 命令框右边的 GO：等同回车（打开图表，不加自选）
+document.querySelector(".cmd .go").addEventListener("click", () =>
+  $("#addInput").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));

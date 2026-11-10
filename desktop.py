@@ -3,7 +3,7 @@
 运行：双击 start.bat，或  pythonw desktop.py
 参数：
   --browser   不开原生窗口，退回用浏览器打开（等同旧版 python server.py）
-  --mini      只开桌面小窗（置顶的迷你自选），主窗口可从小窗里再打开
+  --mini      以小窗模式启动（置顶的迷你自选），可随时切回完整界面
   --debug     打开 WebView2 开发者工具（F12）
 
 窗口大小、位置、是否最大化保存在 %APPDATA%\\TradingBoard\\window.json；
@@ -210,8 +210,9 @@ def ensure_shortcuts():
         log("ensure_shortcuts failed:\n" + traceback.format_exc())
 
 
-# ---------------- 桌面小窗 ----------------
-MINI_TITLE = "交易看板 · 小窗"
+# ---------------- 小窗模式 ----------------
+# 小窗不是第二个窗口：同一个窗口原地缩成置顶的迷你自选，再切回来恢复原来的大小和位置。
+# （v0.7.0 开第二个 WebView2 窗口在部分机器上会卡死，所以改成这样。）
 MINI_DEFAULT = {"width": 340, "height": 560, "x": None, "y": None}
 
 
@@ -219,91 +220,67 @@ class Desk:
     """网页里通过 window.pywebview.api 调用。属性都用下划线开头，pywebview 不会把它们暴露给网页。"""
 
     def __init__(self):
-        self._main = None
-        self._mini = None
-        self._webview = None
+        self._win = None
+        self._mini = False
+        self._normal = None      # 进入小窗前主界面的位置大小
+        self._mini_geo = None    # 小窗的位置大小（记住）
         self._mini_file = None
+        self._live = None        # 主界面实时记录的位置大小（make_main_window 里维护）
+        self._flags = None
 
-    # --- 小窗 ---
-    def _mini_state(self):
+    def _load_mini_geo(self):
         try:
             with open(self._mini_file, encoding="utf-8") as f:
-                st = dict(MINI_DEFAULT, **json.load(f))
-            if st["x"] is not None and not on_screen(int(st["x"]), int(st["y"]), st["width"], st["height"]):
-                st["x"] = st["y"] = None
-            return st
+                g = dict(MINI_DEFAULT, **json.load(f))
+            if g["x"] is not None and not on_screen(int(g["x"]), int(g["y"]), g["width"], g["height"]):
+                g["x"] = g["y"] = None
         except (OSError, ValueError, TypeError):
-            if sys.platform == "win32":  # 默认放在屏幕右上角
-                import ctypes
-                sw = ctypes.windll.user32.GetSystemMetrics(0)
-                return dict(MINI_DEFAULT, x=sw - MINI_DEFAULT["width"] - 24, y=80)
-            return dict(MINI_DEFAULT)
+            g = dict(MINI_DEFAULT)
+        if g["x"] is None and sys.platform == "win32":  # 默认放在屏幕右上角
+            import ctypes
+            sw = ctypes.windll.user32.GetSystemMetrics(0)
+            g["x"], g["y"] = sw - g["width"] - 24, 80
+        return g
 
-    def open_mini(self):
-        if self._mini is not None:
-            try:
-                self._mini.restore()
-                self._mini.show()
-                return True
-            except Exception:  # noqa: BLE001
-                self._mini = None
-        st = self._mini_state()
-        live = dict(st)
-        w = self._webview.create_window(
-            MINI_TITLE, f"http://{HOST}:{PORT}/?mini=1", js_api=self,
-            width=st["width"], height=st["height"], x=st["x"], y=st["y"],
-            min_size=(240, 200), frameless=True, easy_drag=False, on_top=True,
-            background_color="#000000", text_select=False)
+    def is_mini(self):
+        return self._mini
 
-        def on_closing():
-            save_json(self._mini_file, live)
-            self._mini = None
-
-        def on_resized(width, height):
-            live["width"], live["height"] = width, height
-
-        def on_moved(x, y):
-            if x > -10000:
-                live["x"], live["y"] = x, y
-
-        w.events.shown += lambda: set_window_icon(w, MINI_TITLE)
-        w.events.closing += on_closing
-        w.events.resized += on_resized
-        w.events.moved += on_moved
-        self._mini = w
-        return True
-
-    def close_mini(self):
-        if self._mini is not None:
-            self._mini.destroy()
-        return True
-
-    def mini_on_top(self, on):
-        if self._mini is not None:
-            self._mini.on_top = bool(on)
-        return True
-
-    # --- 主窗口 ---
-    def show_main(self):
-        if self._main is None:
-            self._main = make_main_window(self)
-            return True
+    def set_on_top(self, on):
         try:
-            self._main.restore()
-            self._main.show()
+            self._win.on_top = bool(on)
         except Exception:  # noqa: BLE001
-            pass
+            log("set_on_top failed:\n" + traceback.format_exc())
         return True
 
-    def select_in_main(self, symbol):
-        if self._main is not None:
-            self._main.evaluate_js(f"window.board && window.board.select({json.dumps(symbol)})")
-        return True
-
-    def mini_resize(self, width, height):
-        if self._mini is not None:
-            self._mini.resize(max(240, int(width)), max(200, int(height)))
-        return True
+    def set_mini(self, on, pin=True):
+        w = self._win
+        if w is None or bool(on) == self._mini:
+            return self._mini
+        try:
+            if on:
+                self._normal = dict(self._live)
+                self._normal["maximized"] = self._flags["maximized"]
+                if self._flags["maximized"]:
+                    w.restore()
+                g = self._mini_geo or self._load_mini_geo()
+                self._mini = True
+                w.resize(int(g["width"]), int(g["height"]))
+                if g["x"] is not None:
+                    w.move(int(g["x"]), int(g["y"]))
+                w.on_top = bool(pin)
+            else:
+                save_json(self._mini_file, self._mini_geo or {})
+                self._mini = False
+                w.on_top = False
+                n = self._normal or load_state()
+                w.resize(int(n["width"]), int(n["height"]))
+                if n.get("x") is not None:
+                    w.move(int(n["x"]), int(n["y"]))
+                if n.get("maximized"):
+                    w.maximize()
+        except Exception:  # noqa: BLE001
+            log("set_mini failed:\n" + traceback.format_exc())
+        return self._mini
 
 
 def save_json(path, data):
@@ -421,27 +398,43 @@ def start_server():
     return False
 
 
-def make_main_window(desk):
+def make_main_window(desk, start_mini=False):
     import webview
     state = load_state()
-    url = f"http://{HOST}:{PORT}/"
+    url = f"http://{HOST}:{PORT}/" + ("?mini=1" if start_mini else "")
+    if start_mini:
+        g = desk._load_mini_geo()
+        desk._mini, desk._mini_geo = True, dict(g)
+        state_w = dict(state, width=g["width"], height=g["height"], x=g["x"], y=g["y"], maximized=False)
+    else:
+        state_w = state
     window = webview.create_window(
         TITLE, url,
-        width=state["width"], height=state["height"], x=state["x"], y=state["y"],
-        min_size=(MIN_W, MIN_H), maximized=state["maximized"],
+        width=state_w["width"], height=state_w["height"], x=state_w["x"], y=state_w["y"],
+        min_size=(240, 200), maximized=state_w["maximized"], on_top=start_mini,
         background_color="#000000", text_select=True, js_api=desk,
     )
+    desk._win = window
 
     # 只在“正常”状态下记录尺寸，最大化 / 最小化时不覆盖
     live = dict(state)
-    flags = {"maximized": state["maximized"], "minimized": False}
+    flags = {"maximized": state_w["maximized"], "minimized": False}
+    desk._live, desk._flags = live, flags
 
     def on_resized(width, height):
-        if not flags["maximized"] and not flags["minimized"]:
+        if flags["minimized"]:
+            return
+        if desk._mini:
+            desk._mini_geo = dict(desk._mini_geo or MINI_DEFAULT, width=width, height=height)
+        elif not flags["maximized"]:
             live["width"], live["height"] = max(MIN_W, width), max(MIN_H, height)
 
     def on_moved(x, y):
-        if not flags["maximized"] and not flags["minimized"] and x > -10000:
+        if flags["minimized"] or x <= -10000:
+            return
+        if desk._mini:
+            desk._mini_geo = dict(desk._mini_geo or MINI_DEFAULT, x=x, y=y)
+        elif not flags["maximized"]:
             live["x"], live["y"] = x, y
 
     def on_maximized():
@@ -458,14 +451,13 @@ def make_main_window(desk):
             flags["maximized"] = False
 
     def on_closing():
+        if desk._mini:  # 在小窗状态下关闭：记住小窗位置，主界面位置保持进入小窗前的
+            save_json(desk._mini_file, desk._mini_geo or {})
+            if desk._normal:
+                save_state({k: desk._normal[k] for k in ("width", "height", "x", "y", "maximized")})
+            return
         live["maximized"] = flags["maximized"]
         save_state(live)
-        desk._main = None
-        if desk._mini is not None:  # 关主窗口时小窗一起关（只开小窗时不受影响）
-            try:
-                desk._mini.destroy()
-            except Exception:  # noqa: BLE001
-                pass
 
     window.events.shown += lambda: (style_title_bar(window), set_window_icon(window, TITLE))
     window.events.resized += on_resized
@@ -510,13 +502,9 @@ def main():
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
 
     desk = Desk()
-    desk._webview = webview
     desk._mini_file = os.path.join(app_dir(), "mini.json")
-    if "--mini" in sys.argv:
-        desk.open_mini()
-    else:
-        desk._main = make_main_window(desk)
-    ensure_shortcuts()
+    make_main_window(desk, start_mini="--mini" in sys.argv)
+    threading.Thread(target=ensure_shortcuts, daemon=True).start()
 
     webview.start(
         gui="edgechromium" if sys.platform == "win32" else None,
