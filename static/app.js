@@ -96,6 +96,7 @@ function allSymbols() {
   const set = new Set(tickerItems().map((t) => t[0]));
   (state.groups[state.group] || []).forEach((s) => set.add(s));
   if (state.selected) set.add(state.selected);
+  (state.overlays || []).forEach((s) => set.add(s));
   return [...set];
 }
 
@@ -110,6 +111,7 @@ async function refresh() {
     renderWatch(prev);
     renderDetail();
     patchLastBar();
+    if (state.overlays && state.overlays.length) renderOvChips();
     $("#status").textContent = "已更新 " + new Date().toLocaleTimeString("zh-CN", { hour12: false }) + " · 报价：腾讯（A股/港股）、雅虎（美股/全球） · K线：东方财富，失败时回退腾讯/雅虎";
   } catch (e) {
     $("#status").textContent = "刷新失败：" + e;
@@ -509,7 +511,7 @@ let mainSeries = null, chartData = null;
 function colors() {
   return state.redUp ? { up: "#ff3b3b", down: "#26d07c" } : { up: "#26d07c", down: "#ff3b3b" };
 }
-function clearSeries() { series.forEach((s) => chart.removeSeries(s)); series = []; mainSeries = null; }
+function clearSeries() { series.forEach((s) => chart.removeSeries(s)); series = []; mainSeries = null; ovSeries = []; }
 
 function ma(bars, n) {
   const out = []; let sum = 0;
@@ -616,6 +618,7 @@ function renderChart(d, fit) {
   }
   else if (n > 160) chart.timeScale().setVisibleLogicalRange({ from: n - 160, to: n + 4 });
   else chart.timeScale().fitContent();
+  drawOverlays();
   showLegend(null);
 }
 
@@ -703,7 +706,193 @@ function showLegend(param) {
   $("#legend").innerHTML = `${tag}  ${tstr}  开 <b class="${k}">${fmt(full.open)}</b> 高 <b class="${k}">${fmt(full.high)}</b> 低 <b class="${k}">${fmt(full.low)}</b> 收 <b class="${k}">${fmt(full.close)}</b>  量 ${fmt(full.volume, 0)}  ` +
     MA_DEF.map(([n, color]) => `<b style="color:${color}">MA${n}</b>`).join(" ");
 }
-chart.subscribeCrosshairMove(showLegend);
+chart.subscribeCrosshairMove((p) => { showLegend(p); ovLegend(p); });
+
+/* ---------- 曲线叠加：其他标的按涨跌幅对齐画在主图上（类似 TradingView 的“对比”） ----------
+   以当前视野最左边那根 K 线为基准点，叠加标的换算成“同样涨跌幅下主图的价格”，
+   这样主图坐标、均线都不受影响；拖动 / 缩放时重新按新的左边界对齐。 */
+const OV_COLORS = ["#7c9cff", "#ff79c6", "#e0e0e0", "#c792ea", "#3ee6e6"];
+const ovData = new Map();        // 标的|周期 -> bars
+const ovExhausted = new Set();
+let ovSeries = [];               // [{ sym, s, color }]
+let ovAnchorIdx = null;
+state.overlays = state.overlays || [];
+const ovVal = (b) => (b.close !== undefined ? b.close : b.value);
+const PERIOD_SEC = { min: 60, m1: 60, m5: 300, m15: 900, m30: 1800, m60: 3600 };
+
+function ovAligned(bars) {
+  // 对每根主图 K 线，取叠加标的在该时间点（或之前最近）的收盘价；分时/分钟线超过 2 根 K 线的空档留空
+  const main = chartData.bars, out = new Array(main.length).fill(null);
+  const tol = isIntraday(state.period) ? PERIOD_SEC[state.period] * 2 : Infinity;
+  let j = 0;
+  for (let i = 0; i < main.length; i++) {
+    const t = main[i].time;
+    while (j + 1 < bars.length && bars[j + 1].time <= t) j++;
+    if (!bars.length || bars[j].time > t) continue;
+    if (typeof t === "number" && t - bars[j].time > tol) continue;
+    out[i] = ovVal(bars[j]);
+  }
+  return out;
+}
+
+function ovAnchor() {
+  const r = chart.timeScale().getVisibleLogicalRange();
+  const n = chartData.bars.length;
+  return Math.min(n - 1, Math.max(0, r ? Math.ceil(r.from) : 0));
+}
+
+function ovPaint(force) {
+  if (!chartData || !mainSeries || !ovSeries.length) return;
+  const a = ovAnchor();
+  if (!force && a === ovAnchorIdx) return;
+  ovAnchorIdx = a;
+  const main = chartData.bars;
+  for (const o of ovSeries) {
+    const bars = ovData.get(kkey(o.sym, state.period));
+    if (!bars) { o.s.setData([]); continue; }
+    const al = ovAligned(bars); o.al = al;
+    // 基准：视野左边界起第一个两边都有数据的点
+    let k = a; while (k < main.length && al[k] == null) k++;
+    if (k >= main.length) { k = a; while (k >= 0 && al[k] == null) k--; }
+    if (k < 0) { o.s.setData([]); o.base = null; continue; }
+    const m0 = ovVal(main[k]), b0 = al[k];
+    o.base = b0; o.mainBase = m0;
+    o.s.setData(main.map((b, i) => (al[i] == null ? { time: b.time } : { time: b.time, value: (al[i] / b0) * m0 })));
+  }
+}
+let ovRaf = 0;
+chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+  if (!ovSeries.length || ovRaf) return;
+  ovRaf = requestAnimationFrame(() => { ovRaf = 0; ovPaint(false); ovLegend(null); });
+});
+
+async function ovFetch(sym, p, onFirst) {
+  const k = kkey(sym, p);
+  if (!ovData.has(k)) {
+    const d = await fetchKline(sym, p).catch(() => null);
+    if (!d || d.error || !d.bars || !d.bars.length) throw new Error((d && d.error) || "无数据");
+    ovData.set(k, d.bars);
+    onFirst();   // 先画出来，再补更早的历史
+  }
+  // 主图往左加载了更早的历史时，叠加标的也补齐
+  const need = chartData && chartData.bars[0].time;
+  for (let tries = 0; tries < 3; tries++) {
+    const bars = ovData.get(k);
+    if (!need || bars[0].time <= need || ovExhausted.has(k)) break;
+    const d = await (await fetch(`/api/kline?s=${encodeURIComponent(sym)}&p=${p}&before=${bars[0].time}`)).json().catch(() => ({}));
+    const older = (d.bars || []).filter((b) => b.time < bars[0].time);
+    if (!older.length) { ovExhausted.add(k); break; }
+    ovData.set(k, older.concat(bars));
+  }
+}
+
+function drawOverlays() {
+  renderOvChips();
+  if (!chartData || !state.overlays.length) return;
+  const p = state.period, sel = state.selected;
+  ovSeries = state.overlays.filter((sym) => sym !== state.selected).map((sym) => {
+    const color = OV_COLORS[state.overlays.indexOf(sym) % OV_COLORS.length];
+    const s = chart.addSeries(LW.LineSeries, { color, lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
+      crosshairMarkerRadius: 3 });
+    series.push(s);
+    return { sym, s, color };
+  });
+  ovAnchorIdx = null;
+  ovPaint(true);
+  const mine = ovSeries;
+  const repaint = () => {
+    if (ovSeries !== mine || state.period !== p || state.selected !== sel) return;
+    ovPaint(true); ovLegend(null);
+  };
+  mine.forEach((o) => ovFetch(o.sym, p, repaint).catch((e) => { o.err = e.message; }).then(repaint));
+}
+
+function ovPct(o, i) {
+  if (!o.al || o.base == null || i == null || o.al[i] == null) return null;
+  return (o.al[i] / o.base - 1) * 100;
+}
+function ovLegend(param) {
+  let el = $("#ovLegend");
+  if (!ovSeries.length || !chartData) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement("div"); el.id = "ovLegend"; $("#chart").appendChild(el); }
+  const main = chartData.bars;
+  let i = main.length - 1;
+  if (param && param.time !== undefined) { const t = param.time; const k = main.findIndex((b) => b.time === t); if (k >= 0) i = k; }
+  const a = ovAnchorIdx ?? 0;
+  const mp = (ovVal(main[i]) / ovVal(main[Math.min(a, main.length - 1)]) - 1) * 100;
+  const row = (color, name, pct) => `<div><i style="background:${color}"></i>${name} <b class="${cls(pct)}">${pct == null ? "—" : pctStr(pct)}</b></div>`;
+  el.innerHTML = row("#ffb000", (quotes[state.selected] || {}).name || displayCode(state.selected), mp) +
+    ovSeries.map((o) => row(o.color, ((quotes[o.sym] || {}).name || displayCode(o.sym)) + (o.err ? ` <span class="down">${o.err}</span>`
+      : o.al && o.base == null ? ' <span class="muted">（与主图没有重叠的交易时段）</span>' : ""), ovPct(o, i))).join("") +
+    `<div class="muted">相对视野左端</div>`;
+}
+
+function renderOvChips() {
+  $("#ovlChips").innerHTML = state.overlays.map((sym, i) =>
+    `<span class="chip" data-s="${sym}" title="点击切换到该标的"><i style="background:${OV_COLORS[i % OV_COLORS.length]}"></i>${(quotes[sym] || {}).name || displayCode(sym)}<b data-x="${sym}" title="移除叠加">✕</b></span>`).join("");
+}
+function addOverlay(sym) {
+  sym = normSymbol(sym) || sym;
+  if (!sym || state.overlays.includes(sym) || sym === state.selected) return;
+  if (state.overlays.length >= 5) return toast("最多叠加 5 个");
+  state.overlays.push(sym); save();
+  if (!quotes[sym]) fetch("/api/quotes?s=" + encodeURIComponent(sym)).then((r) => r.json()).then((d) => { Object.assign(quotes, d); renderOvChips(); ovLegend(null); }).catch(() => {});
+  if (chartData) renderChart(chartData, false);
+}
+function removeOverlay(sym) {
+  state.overlays = sym ? state.overlays.filter((x) => x !== sym) : []; save();
+  if (chartData) renderChart(chartData, false);
+}
+$("#ovlChips").addEventListener("click", (e) => {
+  if (e.target.dataset.x) return removeOverlay(e.target.dataset.x);
+  const c = e.target.closest(".chip"); if (c) select(c.dataset.s);
+});
+
+/* 添加叠加的小弹窗：常用指数 + 当前分组，输入可搜索 */
+const OV_QUICK = ["sh000001", "sh000300", "sz399006", "sh000688", "hkHSI", "yf:^GSPC", "yf:^IXIC", "yf:^DJI", "yf:GC=F", "yf:CL=F", "yf:USDCNH=X"];
+let ovSearchTimer;
+function ovRenderList(items) {
+  $("#ovlList").innerHTML = items.map(([s, n]) => `<div data-s="${s}">${n || displayCode(s)} <span class="muted">${displayCode(s)}</span></div>`).join("")
+    || '<div class="muted">没有匹配，回车按代码添加</div>';
+}
+function ovDefaultList(q = "") {
+  const syms = [...new Set([...OV_QUICK, ...(state.groups[state.group] || [])])].filter((s) => s !== state.selected && !state.overlays.includes(s));
+  const items = syms.map((s) => [s, (quotes[s] || {}).name]);
+  const f = q.toLowerCase();
+  return f ? items.filter(([s, n]) => s.toLowerCase().includes(f) || (n || "").toLowerCase().includes(f)) : items;
+}
+$("#btnOverlay").onclick = (e) => {
+  e.stopPropagation();
+  const pop = $("#ovlPop"), on = pop.style.display !== "block";
+  pop.style.display = on ? "block" : "none";
+  if (on) { $("#ovlInput").value = ""; ovRenderList(ovDefaultList()); $("#ovlInput").focus(); }
+};
+$("#ovlInput").addEventListener("input", (e) => {
+  const q = e.target.value.trim();
+  ovRenderList(ovDefaultList(q));
+  clearTimeout(ovSearchTimer);
+  if (!q) return;
+  ovSearchTimer = setTimeout(async () => {
+    try {
+      const r = await (await fetch("/api/search?q=" + encodeURIComponent(q))).json();
+      if (Array.isArray(r) && r.length && $("#ovlInput").value.trim() === q)
+        ovRenderList([...ovDefaultList(q), ...r.map((x) => [x.symbol, x.name])].slice(0, 30));
+    } catch (_) { /* 搜索不可用时仍可回车按代码添加 */ }
+  }, 250);
+});
+$("#ovlInput").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") $("#ovlPop").style.display = "none";
+  if (e.key !== "Enter") return;
+  const first = $("#ovlList [data-s]");
+  const v = e.target.value.trim();
+  const sym = normSymbol(v) || (first && first.dataset.s);
+  if (sym) { addOverlay(sym); $("#ovlPop").style.display = "none"; }
+});
+$("#ovlList").addEventListener("click", (e) => {
+  const d = e.target.closest("[data-s]"); if (!d) return;
+  addOverlay(d.dataset.s); $("#ovlPop").style.display = "none";
+});
+document.addEventListener("click", (e) => { if (!e.target.closest("#ovl")) $("#ovlPop").style.display = "none"; });
 
 /* 日/周/月 K 线的最后一根随实时报价更新，不必整张图重载 */
 function patchLastBar() {
@@ -937,6 +1126,8 @@ function symbolItems(s) {
   const items = [
     { header: `${q.name || displayCode(s)}  <span class="muted">${displayCode(s)}</span>` },
     { label: "打开图表", key: "Enter", action: () => select(s) },
+    { label: (state.overlays || []).includes(s) ? "取消叠加" : "叠加到当前图表", disabled: s === state.selected,
+      action: () => ((state.overlays || []).includes(s) ? removeOverlay(s) : addOverlay(s)) },
     { label: "切换周期", sub: Object.entries(PNAME).map(([p, n]) => ({ label: n, checked: state.selected === s && state.period === p,
       action: () => { state.period = p; save(); setSeg("#periods", "p", p); select(s); } })) },
     "-",
@@ -1016,6 +1207,8 @@ $("#chart").addEventListener("contextmenu", (e) => {
     { header: `${(quotes[s] || {}).name || displayCode(s)} · ${PNAME[state.period]}` },
     { label: "回到最新", key: "Home", action: () => chart.timeScale().scrollToRealTime() },
     { label: "重置视图", action: () => { if (chartData) renderChart(chartData, true); } },
+    { label: "叠加对比…", action: () => setTimeout(() => $("#btnOverlay").click(), 0) },
+    { label: "清除所有叠加", disabled: !(state.overlays || []).length, action: () => removeOverlay(null) },
     { label: "刷新数据", key: "F5", action: () => { klineCache.delete(kkey(s, state.period)); loadChart(false); } },
     "-",
     { label: "周期", sub: Object.entries(PNAME).map(([p, n]) => ({ label: n, checked: state.period === p,
