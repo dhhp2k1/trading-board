@@ -1033,14 +1033,16 @@ async function checkUpdate(manual) {
   try {
     const r = await (await fetch("/api/update/check" + (manual ? "?force=1" : ""))).json();
     if (r.error) throw new Error(r.error);
-    $("#ver").classList.remove("updfail"); $("#ver").title = "";
+    $("#ver").classList.remove("updfail");
+    const srcs = (r.sources || []).map((x) => `${x.src}：${x.version ? "v" + x.version : "失败 " + (x.error || "")}`).join("\n");
+    $("#ver").title = `最新版本 v${r.latest}（${new Date().toLocaleTimeString("zh-CN", { hour12: false })} 检查）\n${srcs}\n右键 → 检查更新 可立即重查`;
     updInfo = r;
     const btn = $("#updBtn");
     if (r.available) {
       btn.textContent = `↑ 新版本 v${r.latest}`; btn.title = (r.notes || "") + "\n点击更新"; btn.style.display = "";
     } else {
       btn.style.display = "none";
-      if (manual) toast(`已是最新版本 v${r.current}`);
+      if (manual) toast(`已是最新版本 v${r.current}（悬停版本号可看各更新源结果）`);
     }
   } catch (e) {
     if (manual) toast("检查更新失败：" + e.message);

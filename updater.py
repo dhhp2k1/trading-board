@@ -49,25 +49,59 @@ def _cdn(ref, path):
 
 
 def fetch_manifest():
-    """取最新的 version.json：先查 main 的最新提交 sha，再按 sha 取（不可变地址，避免 CDN 旧缓存）。"""
+    """同时从所有来源取 version.json，取版本号最高的一份。
+
+    国内网络下 GitHub 常不通、jsDelivr 的 @main 地址最多缓存 12 小时，
+    按顺序“第一个成功就用”会拿到旧版本却不报错，所以并行查询后比较版本号。"""
     if TEST_BASE:
-        return json.loads(_get(f"{TEST_BASE}/version.json").decode("utf-8"))
-    ref = resolve_ref()
+        m = json.loads(_get(f"{TEST_BASE}/version.json").decode("utf-8"))
+        m["_sources"] = [{"src": "test", "version": m.get("version")}]
+        return m
+    from concurrent.futures import ThreadPoolExecutor
     t = int(time.time())
-    urls = []
-    if ref != BRANCH:
-        urls += [f"https://raw.githubusercontent.com/{REPO}/{ref}/version.json"] + _cdn(ref, "version.json")
-    urls += [f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/version.json?t={t}",
-             f"https://github.com/{REPO}/raw/{BRANCH}/version.json"] + _cdn(BRANCH, "version.json")
-    errors = []
-    for u in urls:
-        try:
-            m = json.loads(_get(u, timeout=5).decode("utf-8"))
-            m["_ref"] = ref if f"/{ref}/" in u or f"@{ref}/" in u else BRANCH
-            return m
-        except Exception as e:  # noqa: BLE001
-            errors.append(f"{u.split('/')[2]}: {e}")
-    raise RuntimeError("；".join(errors))
+    ref_box = {}
+
+    def by_ref():  # 先查 main 最新提交 sha，再按 sha 取（不可变地址，不受 CDN 缓存影响）
+        ref = resolve_ref()
+        ref_box["ref"] = ref
+        if ref == BRANCH:
+            raise RuntimeError("查不到最新提交")
+        urls = [f"https://raw.githubusercontent.com/{REPO}/{ref}/version.json"] + _cdn(ref, "version.json")
+        last = None
+        for u in urls:
+            try:
+                return u, ref, json.loads(_get(u, timeout=6).decode("utf-8"))
+            except Exception as e:  # noqa: BLE001
+                last = e
+        raise RuntimeError(f"按提交取失败：{last}")
+
+    def one(u):
+        def f():
+            return u, BRANCH, json.loads(_get(u, timeout=6).decode("utf-8"))
+        return f
+
+    jobs = [("最新提交", by_ref),
+            ("GitHub raw", one(f"https://raw.githubusercontent.com/{REPO}/{BRANCH}/version.json?t={t}")),
+            ("GitHub", one(f"https://github.com/{REPO}/raw/{BRANCH}/version.json?t={t}"))]
+    jobs += [(u.split("/")[2], one(u)) for u in _cdn(BRANCH, "version.json")]
+    results, sources = [], []
+    with ThreadPoolExecutor(len(jobs)) as ex:
+        futs = [(name, ex.submit(fn)) for name, fn in jobs]
+        for name, fu in futs:
+            try:
+                u, ref, m = fu.result(timeout=25)
+                results.append((_vtuple(m.get("version")), ref != BRANCH, ref, m))
+                sources.append({"src": name, "version": m.get("version")})
+            except Exception as e:  # noqa: BLE001
+                sources.append({"src": name, "error": str(e)[:80]})
+    if not results:
+        raise RuntimeError("所有更新源都连不上：" + "；".join(f"{x['src']} {x.get('error', '')}" for x in sources))
+    # 版本最高者优先；同版本时优先按提交 sha 取到的那份（下载地址不受缓存影响）
+    results.sort(key=lambda r: (r[0], r[1]), reverse=True)
+    _, _, ref, m = results[0]
+    m["_ref"] = ref if ref != BRANCH else ref_box.get("ref", BRANCH)
+    m["_sources"] = sources
+    return m
 
 
 def check(current_version, force=False):
@@ -89,6 +123,7 @@ def check(current_version, force=False):
         "available": _vtuple(m.get("version")) > _vtuple(current_version),
         "frozen": bool(getattr(sys, "frozen", False)),
         "repo": REPO,
+        "sources": m.get("_sources", []),
     }
 
 
