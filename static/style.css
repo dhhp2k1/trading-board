@@ -234,7 +234,6 @@ body[data-theme="graphite"] #cName, body[data-theme="graphite"] .big { color: va
 #watch td.spk svg.sp { width: 100%; height: 1.45rem; display: block; }
 svg.sp line.base { stroke: var(--muted); stroke-width: .6; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; opacity: .7; }
 body.wl-nospark #watch .spk { display: none; }
-body.wl-nochange #watch th:nth-child(4), body.wl-nochange #watch td.chg { display: none; }
 #watch td { vertical-align: middle; }
 #watch td:first-child { position: relative; }
 .pill { display: inline-block; min-width: 4.6rem; text-align: right; padding: 1px 6px; color: #fff; font-weight: 600; border-radius: 3px; }
@@ -276,3 +275,35 @@ body.wl-heat #watch { display: none; }
 #lookPop .lk-seg { display: flex; margin-bottom: 4px; } #lookPop .lk-seg button { flex: 1; }
 #lookPop .lk-seg button.on { background: var(--head); color: var(--head-text); }
 #lookPop label { display: block; padding: 2px 0; cursor: pointer; }
+
+/* ===== 自选两行布局：第一行全名，第二行代码/溢价/盘前盘后；数字列固定宽度 ===== */
+#watch th:first-child, #watch td:first-child { width: auto; }
+#watch th.num, #watch td.num { width: 6.2rem; }
+#watch th.pct, #watch td.pct { width: 5.9rem; }
+#watch th.spk, #watch td.spk { width: 4.4rem; }
+#watch .colsplit { display: none; }
+#watch td { white-space: normal; padding-top: 3px; padding-bottom: 3px; }
+#watch td.nmc .l1 { color: var(--white); line-height: 1.25; word-break: break-all; }
+#watch td.nmc .l2 { display: flex; align-items: baseline; gap: 4px; line-height: 1.2; white-space: nowrap; overflow: hidden; }
+#watch td.nmc .l2 .code { margin-left: 0; }
+#watch td.nmc .l2 .ext { margin-left: 0; font-size: 0.85rem; }
+#watch td.num .l1 { line-height: 1.25; white-space: nowrap; }
+#watch td.num .l2 { font-size: 0.85rem; line-height: 1.2; white-space: nowrap; opacity: .85; }
+#watch td.pct { white-space: nowrap; position: relative; }
+#watch td.pct .del { position: absolute; left: 0; top: 50%; transform: translateY(-50%); margin: 0; padding: 0 3px; }
+#watch td.spk svg.sp { height: 2.1rem; }
+.pill { min-width: 0; width: 100%; box-sizing: border-box; text-align: center; padding: 3px 2px; }
+#watch .rng { margin-top: 3px; }
+body.wl-nochange #watch td.chg { display: none; }
+body.wl-dense #watch td { padding-top: 1px; padding-bottom: 1px; }
+body.wl-dense #watch td.spk svg.sp { height: 1.7rem; }
+#watch td.pct { padding-left: 4px; padding-right: 4px; overflow: hidden; }
+#watch td.pct .pill { display: block; }
+/* 自选栏较窄时缩小走势图、数字列，把空间留给全名 */
+#left { container-type: inline-size; }
+@container (max-width: 380px) {
+  #watch th.spk, #watch td.spk { width: 3rem; }
+  #watch th.num, #watch td.num { width: 5.4rem; }
+  #watch th.pct, #watch td.pct { width: 5.4rem; }
+  #watch td, #watch th { padding-left: 4px; padding-right: 4px; }
+}

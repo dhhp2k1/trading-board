@@ -1,7 +1,7 @@
 {
- "version": "0.6.0",
- "build": "2026-11-10 11:40",
- "notes": "外观升级：自选栏日内走势小图、日内高低区间条、涨跌幅色块、热力图视图；4 套主题（彭博琥珀/午夜深蓝/石墨灰/终端绿），底栏「外观」切换",
+ "version": "0.6.1",
+ "build": "2026-11-10 12:10",
+ "notes": "自选栏改为两行布局：第一行显示完整名称，第二行代码/溢价率/盘前盘后，涨跌额放到最新价下方；数字列固定宽度不再被截断，窄栏自动收缩走势图",
  "requirements_changed": false,
  "files": {
   ".gitignore": "3c9e2e7a536e9299f197dc1e910ba49b80a85c24d0d6a4204383c85dbbc1a20f",
@@ -10,15 +10,15 @@
   "desktop.py": "1be4d523838f5fb8cc77de8073eb2ac54790a1b9495ac7d07afc5e4d1660aa68",
   "news.py": "f499382851d10eaa9711616a637a66846b2208196d5050aa1059bf7ebca1dfba",
   "requirements.txt": "7484bd492aa4bc491526a79c82e053e93c403034a923e224caa381ed67a9c4ce",
-  "server.py": "f1147343dc6332958d44e3ce3dbfa90e7fdfe6f27ae67eb69bb4cdfd2fca9d4a",
+  "server.py": "a1e0fc16af57b76fd8a7ef527ff83b10e20affd0754d25c4eb884ced2552082c",
   "start.bat": "b4d7168880a9b7c247d550415cadfba24abddff7321f201189f24b7b378e954b",
-  "static/app.js": "27e7fd8dc39b1ad67b020b3817ace54cf8b2885ccff83e6a7304e68e9c6bc6d0",
-  "static/index.html": "17da663435afccf9d4e741b6760e8f6dcba288fbb2bb1ea55b8a61295b14f195",
+  "static/app.js": "b8896b0642386466641674a2f2ab054ba586dd5eca172b87d8f4b5006c4c9830",
+  "static/index.html": "8bf0337fc86878e4dc35151e10433cf9fe47457c58661a9e8f7a9003a53d25dc",
   "static/lightweight-charts.LICENSE": "70c9d5382506dd184465425c08a99ad9bd6d9ac1313c252968ba0b585e5ef823",
   "static/lightweight-charts.standalone.production.js": "e21cc5caa0226ef30bd8549c50b9ef926615f2a4ee6b4e486353477a55f598cf",
   "static/news.css": "2d3ef0bddd6017c27a51f84716d5d3bdcf1f0410dc352cf32f92897cc3e36b42",
   "static/news.js": "575e28d929d15b0a72f576d6bd848eac937e5c3bd60e103298e4ea274b836de0",
-  "static/style.css": "3bbd89d59dfb7be1e6ddfd36714aca95ab2801d9255439f60c7807123139fdf9",
+  "static/style.css": "a3aaf193ad94cb7326bde399fdfc1e87d74b07c211fd4916e233e0f3bbd6b4d1",
   "tools/release.py": "42ad85105c25e919cfeb41e445375db9a28168b198d75464afee4272505bc406",
   "updater.py": "67243f9212343c8e156e41f8981a7510ffed2b327daf3e96d8883234afa42391"
  }

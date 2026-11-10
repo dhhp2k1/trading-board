@@ -206,11 +206,14 @@ function renderWatch(prev = {}) {
       ? (q.price > p.price ? "flash-up" : "flash-down") : "";
     const L = look();
     return `<tr data-s="${s}" class="${s === state.selected ? "sel" : ""} ${flash}">
-      <td title="${displayCode(s)}"><div class="cell"><span class="nm">${q.name || (q.error ? "⚠ " : "") + displayCode(s)}<span class="code">${displayCode(s)}</span></span>${extTag(q)}${L.prem ? premTag(q) : ""}</div>${L.range ? rangeBar(q) : ""}</td>
+      <td class="nmc" title="${q.name || ""} ${displayCode(s)}">
+        <div class="l1">${q.name || (q.error ? "⚠ " : "") + displayCode(s)}</div>
+        <div class="l2"><span class="code">${displayCode(s)}</span>${extTag(q)}${L.prem ? premTag(q) : ""}</div>
+        ${L.range ? rangeBar(q) : ""}</td>
       <td class="spk">${L.spark ? sparkSvg(s, q) : ""}</td>
-      <td class="r ${cls(q.pct)}">${fmt(q.price)}</td>
-      <td class="r chg ${cls(q.pct)}">${q.change == null ? "—" : (q.change > 0 ? "+" : "") + fmt(q.change)}</td>
-      <td class="r ${L.pill ? "" : cls(q.pct)}"><span class="del" data-del="${s}" title="移出自选">✕</span>${L.pill ? pill(q.pct) : pctStr(q.pct)}</td></tr>`;
+      <td class="r num"><div class="l1 ${cls(q.pct)}">${fmt(q.price)}</div>
+        <div class="l2 chg ${cls(q.pct)}">${q.change == null ? "" : (q.change > 0 ? "+" : "") + fmt(q.change)}</div></td>
+      <td class="r pct ${L.pill ? "" : cls(q.pct)}"><span class="del" data-del="${s}" title="移出自选">✕</span>${L.pill ? pill(q.pct) : pctStr(q.pct)}</td></tr>`;
   }).join("");
   $("#watchCount").textContent = `${list.length} 只`;
   if (look().view === "heat") renderHeat(list);
