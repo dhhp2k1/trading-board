@@ -20,8 +20,8 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 版本戳：每次发版改这里。顶栏会显示，桌面启动器也用它判断后台跑的是不是旧版本
-VERSION = "0.5.7"
-BUILD = "2026-11-10 11:00"
+VERSION = "0.6.0"
+BUILD = "2026-11-10 11:40"
 
 PORT = int(os.environ.get("BOARD_PORT", "8765"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -325,6 +325,43 @@ def fallback_kline(symbol, period):
         raise ValueError("；".join(errors)) from e
 
 
+def spark(symbol):
+    """自选列表里的日内走势小图：最近一个交易日的分时，压缩到 ≤80 个点。缓存 60 秒。"""
+    def build():
+        d = kline(symbol, "min")
+        bars = d.get("bars") or []
+        if not bars:
+            return None
+        def day(t):
+            return time.strftime("%Y-%m-%d", time.gmtime(t)) if isinstance(t, (int, float)) else str(t)[:10]
+        last = day(bars[-1]["time"])
+        today = [b for b in bars if day(b["time"]) == last]
+        vals = [b.get("value", b.get("close")) for b in today]
+        vals = [v for v in vals if v is not None]
+        step = max(1, -(-len(vals) // 60))
+        pts = vals[::step]
+        if vals and pts[-1] != vals[-1]:
+            pts.append(vals[-1])
+        prev = d.get("prevClose")
+        if not prev:  # 没给昨收：取上一交易日最后一笔
+            older = [b for b in bars if day(b["time"]) < last]
+            if older:
+                prev = older[-1].get("value", older[-1].get("close"))
+        return {"pts": [round(v, 4) for v in pts], "prev": prev, "day": last}
+    return cached("spark:" + symbol, 60, build)
+
+
+def sparks(symbols):
+    futs = {s: POOL.submit(spark, s) for s in symbols[:80]}
+    out = {}
+    for s, f in futs.items():
+        try:
+            out[s] = f.result(timeout=12)
+        except Exception:  # noqa: BLE001
+            out[s] = None
+    return out
+
+
 def kline(symbol, period):
     """period: min(分时) / m1 m5 m15 m30 m60（分钟K）/ day / week / month。
     先请求东方财富；1.5 秒内没回来就同时请求备用源（腾讯 / 雅虎），谁先成功用谁。"""
@@ -563,6 +600,9 @@ class Handler(SimpleHTTPRequestHandler):
             if u.path == "/api/quotes":
                 syms = [s for s in (qs.get("s", [""])[0]).split(",") if s]
                 return self.send_json(get_quotes(syms))
+            if u.path == "/api/spark":
+                syms = [x for x in (qs.get("s", [""])[0]).split(",") if x]
+                return self.send_json(sparks(syms))
             if u.path == "/api/kline":
                 s, p = qs["s"][0], qs.get("p", ["day"])[0]
                 before = qs.get("before", [""])[0]

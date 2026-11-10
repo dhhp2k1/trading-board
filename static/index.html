@@ -26,9 +26,11 @@
   <aside id="left" class="panel">
     <div class="ph"><span class="pn">1</span> 自选监控 <span class="muted" id="watchCount"></span></div>
     <div class="tabs" id="groupTabs"></div>
+    <div id="heat"></div>
     <table id="watch">
       <thead><tr>
         <th data-sort="name">证券</th>
+        <th class="spk">走势</th>
         <th data-sort="price" class="r">最新</th>
         <th data-sort="change" class="r">涨跌</th>
         <th data-sort="pct" class="r">涨跌%</th>
@@ -90,6 +92,7 @@
 <footer>
   <span id="status">启动中…</span>
   <span>
+    <button id="btnLook" class="look" title="主题、自选栏显示方式">◐ 外观</button>
     刷新
     <select id="interval">
       <option value="2000">2s</option>
@@ -101,6 +104,18 @@
   </span>
 </footer>
 
+<div id="lookPop">
+  <div class="lk-h">主题</div>
+  <div class="lk-themes" id="lkThemes"></div>
+  <div class="lk-h">自选栏</div>
+  <div class="lk-seg" id="lkView"><button data-v="list">列表</button><button data-v="heat">热力图</button></div>
+  <label><input type="checkbox" data-o="spark"> 日内走势小图</label>
+  <label><input type="checkbox" data-o="range"> 日内高低区间条</label>
+  <label><input type="checkbox" data-o="pill"> 涨跌幅色块（越深涨跌越大）</label>
+  <label><input type="checkbox" data-o="change"> 显示涨跌额</label>
+  <label><input type="checkbox" data-o="prem"> ETF 溢价率</label>
+  <label><input type="checkbox" data-o="dense"> 紧凑行高</label>
+</div>
 <dialog id="manageDlg">
   <div class="ph">整理自选</div>
   <div class="pad">

@@ -204,14 +204,135 @@ function renderWatch(prev = {}) {
     const p = prev[s];
     const flash = p && q.price != null && p.price != null && q.price !== p.price
       ? (q.price > p.price ? "flash-up" : "flash-down") : "";
+    const L = look();
     return `<tr data-s="${s}" class="${s === state.selected ? "sel" : ""} ${flash}">
-      <td title="${displayCode(s)}"><div class="cell"><span class="nm">${q.name || (q.error ? "⚠ " : "") + displayCode(s)}<span class="code">${displayCode(s)}</span></span>${extTag(q)}${state.showPrem !== false ? premTag(q) : ""}</div></td>
+      <td title="${displayCode(s)}"><div class="cell"><span class="nm">${q.name || (q.error ? "⚠ " : "") + displayCode(s)}<span class="code">${displayCode(s)}</span></span>${extTag(q)}${L.prem ? premTag(q) : ""}</div>${L.range ? rangeBar(q) : ""}</td>
+      <td class="spk">${L.spark ? sparkSvg(s, q) : ""}</td>
       <td class="r ${cls(q.pct)}">${fmt(q.price)}</td>
-      <td class="r ${cls(q.pct)}">${q.change == null ? "—" : (q.change > 0 ? "+" : "") + fmt(q.change)}</td>
-      <td class="r ${cls(q.pct)}"><span class="del" data-del="${s}" title="移出自选">✕</span>${pctStr(q.pct)}</td></tr>`;
+      <td class="r chg ${cls(q.pct)}">${q.change == null ? "—" : (q.change > 0 ? "+" : "") + fmt(q.change)}</td>
+      <td class="r ${L.pill ? "" : cls(q.pct)}"><span class="del" data-del="${s}" title="移出自选">✕</span>${L.pill ? pill(q.pct) : pctStr(q.pct)}</td></tr>`;
   }).join("");
   $("#watchCount").textContent = `${list.length} 只`;
+  if (look().view === "heat") renderHeat(list);
+  needSparks(list);
 }
+
+/* ---------- 外观：主题 + 自选栏显示方式 ---------- */
+const LOOK_DEF = { theme: "bloomberg", view: "list", spark: true, range: true, pill: true, change: true, prem: true, dense: false };
+function look() { return Object.assign({}, LOOK_DEF, state.look || {}); }
+const THEMES = {
+  bloomberg: { name: "彭博琥珀", sw: ["#000", "#ff8c00", "#f4a81d"] },
+  midnight: { name: "午夜深蓝", sw: ["#0a1020", "#1e88e5", "#9fc3ff"] },
+  graphite: { name: "石墨灰", sw: ["#131722", "#2962ff", "#d1d4dc"] },
+  matrix: { name: "终端绿", sw: ["#020a04", "#19c37d", "#7dffb0"] },
+};
+function upDownRGB(pct) {
+  const up = state.redUp ? [255, 59, 59] : [38, 208, 124], dn = state.redUp ? [38, 208, 124] : [255, 59, 59];
+  return pct >= 0 ? up : dn;
+}
+function pill(pct) {
+  if (pct == null) return '<span class="pill">—</span>';
+  const a = Math.min(1, 0.22 + Math.abs(pct) / 6), c = upDownRGB(pct);
+  const bg = Math.abs(pct) < 0.005 ? "rgba(128,128,128,.25)" : `rgba(${c.join(",")},${a.toFixed(2)})`;
+  return `<span class="pill" style="background:${bg}">${pctStr(pct)}</span>`;
+}
+function rangeBar(q) {
+  if (q.high == null || q.low == null || q.price == null || q.high <= q.low) return "";
+  const pos = (v) => Math.max(0, Math.min(100, (v - q.low) / (q.high - q.low) * 100));
+  const c = upDownRGB(q.pct || 0);
+  const pc = q.prevClose != null && q.prevClose >= q.low && q.prevClose <= q.high ? `<i class="pc" style="left:${pos(q.prevClose)}%"></i>` : "";
+  return `<div class="rng" title="今日 低 ${fmt(q.low)} — 高 ${fmt(q.high)}"><b style="width:${pos(q.price)}%;background:rgba(${c.join(",")},.55)"></b>${pc}<i class="now" style="left:${pos(q.price)}%"></i></div>`;
+}
+
+/* 走势小图数据：按需批量取，60 秒内不重复请求；最后一个点用实时价 */
+const sparkData = {}, sparkAt = {};
+let sparkTimer = null;
+function needSparks(list) {
+  if (!look().spark && look().view !== "heat") return;
+  const now = Date.now();
+  const want = list.filter((s) => !sparkAt[s] || now - sparkAt[s] > 60000);
+  if (!want.length || sparkTimer) return;
+  want.forEach((s) => (sparkAt[s] = now));
+  sparkTimer = setTimeout(async () => {
+    sparkTimer = null;
+    for (let i = 0; i < want.length; i += 20) {
+      try {
+        const d = await (await fetch("/api/spark?s=" + encodeURIComponent(want.slice(i, i + 20).join(",")))).json();
+        Object.entries(d).forEach(([k, v]) => { if (v) sparkData[k] = v; });
+        renderWatch();
+      } catch (_) { /* 取不到就不画 */ }
+    }
+  }, 200);
+}
+function sparkSvg(s, q) {
+  const d = sparkData[s]; if (!d || !d.pts || d.pts.length < 2) return '<svg class="sp"></svg>';
+  const pts = d.pts.slice(); if (q.price != null) pts[pts.length - 1] = q.price;
+  const base = d.prev ?? pts[0];
+  let lo = Math.min(base, ...pts), hi = Math.max(base, ...pts); if (hi === lo) { hi += 1e-9; lo -= 1e-9; }
+  const W = 64, H = 18, n = Math.max(pts.length - 1, 1);
+  const y = (v) => (H - 1 - (v - lo) / (hi - lo) * (H - 2)).toFixed(1);
+  const line = pts.map((v, i) => `${(i / n * W).toFixed(1)},${y(v)}`).join(" ");
+  const c = `rgb(${upDownRGB((pts[pts.length - 1] - base) || 0).join(",")})`;
+  const id = "g" + s.replace(/[^a-z0-9]/gi, "");
+  return `<svg class="sp" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c}" stop-opacity=".35"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></linearGradient></defs>
+    <line x1="0" x2="${W}" y1="${y(base)}" y2="${y(base)}" class="base"/>
+    <polygon points="0,${H} ${line} ${W},${H}" fill="url(#${id})"/>
+    <polyline points="${line}" fill="none" stroke="${c}" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>`;
+}
+
+/* 热力图视图：方块颜色深浅 = 涨跌幅大小 */
+function renderHeat(list) {
+  $("#heat").innerHTML = list.map((s) => {
+    const q = quotes[s] || {}, pct = q.pct;
+    const a = pct == null ? 0 : Math.min(0.95, 0.18 + Math.abs(pct) / 5), c = upDownRGB(pct || 0);
+    const bg = pct == null || Math.abs(pct) < 0.005 ? "rgba(128,128,128,.18)" : `rgba(${c.join(",")},${a.toFixed(2)})`;
+    return `<div class="tile ${s === state.selected ? "sel" : ""}" data-s="${s}" style="background:${bg}">
+      <div class="tn">${q.name || displayCode(s)}</div>
+      <div class="tp">${pctStr(pct)}</div>
+      <div class="tq">${fmt(q.price)}${q.premium != null ? ` · 溢${pctStr(q.premium)}` : ""}</div>
+      ${sparkSvg(s, q).replace('class="sp"', 'class="sp tsp"')}</div>`;
+  }).join("");
+}
+$("#heat").addEventListener("click", (e) => { const t = e.target.closest(".tile"); if (t) select(t.dataset.s); });
+
+function applyLook() {
+  const L = look();
+  document.body.dataset.theme = L.theme;
+  ["spark", "range", "pill", "change", "dense"].forEach((k) => document.body.classList.toggle("wl-no" + k, !L[k]));
+  document.body.classList.toggle("wl-dense", L.dense);
+  document.body.classList.toggle("wl-heat", L.view === "heat");
+  // 图表配色跟随主题
+  const cs = getComputedStyle(document.body);
+  const v = (n, d) => (cs.getPropertyValue(n).trim() || d);
+  if (typeof chart !== "undefined") chart.applyOptions({
+    layout: { background: { color: v("--bg", "#000") }, textColor: v("--axis", "#c9a35a") },
+    grid: { vertLines: { color: v("--grid", "#161616") }, horzLines: { color: v("--grid", "#161616") } },
+    rightPriceScale: { borderColor: v("--line", "#2a2a2a") }, timeScale: { borderColor: v("--line", "#2a2a2a") },
+    crosshair: { vertLine: { color: v("--head", "#ff8c00"), labelBackgroundColor: v("--head", "#ff8c00") },
+      horzLine: { color: v("--head", "#ff8c00"), labelBackgroundColor: v("--head", "#ff8c00") } },
+  });
+}
+function setLook(patch) { state.look = Object.assign(look(), patch); save(); applyLook(); renderLookPop(); renderWatch(); }
+function renderLookPop() {
+  const L = look();
+  $("#lkThemes").innerHTML = Object.entries(THEMES).map(([k, t]) =>
+    `<button data-t="${k}" class="${L.theme === k ? "on" : ""}"><span class="sw">${t.sw.map((c) => `<i style="background:${c}"></i>`).join("")}</span>${t.name}</button>`).join("");
+  document.querySelectorAll("#lkView button").forEach((b) => b.classList.toggle("on", b.dataset.v === L.view));
+  document.querySelectorAll("#lookPop input[data-o]").forEach((cb) => (cb.checked = !!L[cb.dataset.o]));
+}
+$("#btnLook").onclick = (e) => {
+  e.stopPropagation();
+  const p = $("#lookPop"), on = p.style.display !== "block";
+  p.style.display = on ? "block" : "none"; if (on) renderLookPop();
+};
+$("#lookPop").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const t = e.target.closest("[data-t]"); if (t) return setLook({ theme: t.dataset.t });
+  const v = e.target.closest("[data-v]"); if (v) return setLook({ view: v.dataset.v });
+});
+$("#lookPop").addEventListener("change", (e) => { const o = e.target.dataset.o; if (o) setLook({ [o]: e.target.checked }); });
+document.addEventListener("click", (e) => { if (!e.target.closest("#lookPop")) $("#lookPop").style.display = "none"; });
 $("#watch tbody").addEventListener("click", (e) => {
   const del = e.target.dataset.del;
   if (del) {
@@ -1007,7 +1128,7 @@ $("#redUp").checked = state.redUp;
 document.body.classList.toggle("greenUp", !state.redUp);
 $("#redUp").onchange = (e) => {
   state.redUp = e.target.checked; save();
-  document.body.classList.toggle("greenUp", !state.redUp); if (chartData) renderChart(chartData, false);
+  document.body.classList.toggle("greenUp", !state.redUp); renderWatch(); if (chartData) renderChart(chartData, false);
 };
 
 /* ---------- 智能缩放：字号随窗口宽度和屏幕缩放自动调整，Ctrl+滚轮 / Ctrl +/−/0 手动微调 ---------- */
@@ -1215,7 +1336,11 @@ $("#left").addEventListener("contextmenu", (e) => {
     { label: "导入自选…", action: () => $("#btnImport").click() },
     { label: "导出自选", action: () => $("#btnExport").click() },
     "-",
-    { label: "显示 ETF 溢价率", checked: state.showPrem !== false, action: () => { state.showPrem = state.showPrem === false; save(); renderWatch(); } },
+    { label: "视图", sub: [{ label: "列表", checked: look().view === "list", action: () => setLook({ view: "list" }) },
+      { label: "热力图", checked: look().view === "heat", action: () => setLook({ view: "heat" }) }] },
+    { label: "显示", sub: [["spark", "日内走势小图"], ["range", "日内高低区间条"], ["pill", "涨跌幅色块"], ["change", "涨跌额"], ["prem", "ETF 溢价率"], ["dense", "紧凑行高"]]
+      .map(([k, n]) => ({ label: n, checked: !!look()[k], action: () => setLook({ [k]: !look()[k] }) })) },
+    { label: "外观设置…", action: () => setTimeout(() => $("#btnLook").click(), 0) },
     { label: "排序", sub: [
       { label: "涨跌幅 从高到低", checked: state.sort && state.sort.key === "pct" && state.sort.dir === -1, action: () => sortBy("pct", -1) },
       { label: "涨跌幅 从低到高", checked: state.sort && state.sort.key === "pct" && state.sort.dir === 1, action: () => sortBy("pct", 1) },
@@ -1356,3 +1481,6 @@ function dragger(el, onMove, onReset) {
   }, () => { state.nameCol = null; });
   applyLayout();
 })();
+
+if (state.showPrem === false) { state.look = Object.assign(look(), { prem: false }); delete state.showPrem; save(); }
+applyLook();
