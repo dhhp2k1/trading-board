@@ -92,11 +92,12 @@ const pctStr = (p) => (p == null ? "—" : (p > 0 ? "+" : "") + p.toFixed(2) + "
 const cls = (p) => (p > 0 ? "up" : p < 0 ? "down" : "");
 
 /* ---------- 行情刷新 ---------- */
+function ovList() { return ((state.ovMap || {})[state.selected]) || []; }
 function allSymbols() {
   const set = new Set(tickerItems().map((t) => t[0]));
   (state.groups[state.group] || []).forEach((s) => set.add(s));
   if (state.selected) set.add(state.selected);
-  (state.overlays || []).forEach((s) => set.add(s));
+  ovList().forEach((s) => set.add(s));
   return [...set];
 }
 
@@ -111,7 +112,7 @@ async function refresh() {
     renderWatch(prev);
     renderDetail();
     patchLastBar();
-    if (state.overlays && state.overlays.length) renderOvChips();
+    if (ovList().length) renderOvChips();
     $("#status").textContent = "已更新 " + new Date().toLocaleTimeString("zh-CN", { hour12: false }) + " · 报价：腾讯（A股/港股）、雅虎（美股/全球） · K线：东方财富，失败时回退腾讯/雅虎";
   } catch (e) {
     $("#status").textContent = "刷新失败：" + e;
@@ -725,7 +726,13 @@ const ovData = new Map();        // 标的|周期 -> bars
 const ovExhausted = new Set();
 let ovSeries = [];               // [{ sym, s, color }]
 let ovAnchorIdx = null;
-state.overlays = state.overlays || [];
+// 叠加按主图标的分别保存：每个标的有自己的一套叠加，切到别的标的不会带过去
+state.ovMap = state.ovMap || {};
+if (state["overlays"]) { if (state["overlays"].length && state.selected) state.ovMap[state.selected] = state["overlays"]; delete state["overlays"]; }
+function setOvList(list) {
+  if (list.length) state.ovMap[state.selected] = list; else delete state.ovMap[state.selected];
+  save();
+}
 const ovVal = (b) => (b.close !== undefined ? b.close : b.value);
 const PERIOD_SEC = { min: 60, m1: 60, m5: 300, m15: 900, m30: 1800, m60: 3600 };
 
@@ -797,10 +804,10 @@ async function ovFetch(sym, p, onFirst) {
 
 function drawOverlays() {
   renderOvChips();
-  if (!chartData || !state.overlays.length) return;
+  if (!chartData || !ovList().length) return;
   const p = state.period, sel = state.selected;
-  ovSeries = state.overlays.filter((sym) => sym !== state.selected).map((sym) => {
-    const color = OV_COLORS[state.overlays.indexOf(sym) % OV_COLORS.length];
+  ovSeries = ovList().filter((sym) => sym !== state.selected).map((sym) => {
+    const color = OV_COLORS[ovList().indexOf(sym) % OV_COLORS.length];
     const s = chart.addSeries(LW.LineSeries, { color, lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
       crosshairMarkerRadius: 3 });
     series.push(s);
@@ -837,19 +844,19 @@ function ovLegend(param) {
 }
 
 function renderOvChips() {
-  $("#ovlChips").innerHTML = state.overlays.map((sym, i) =>
+  $("#ovlChips").innerHTML = ovList().map((sym, i) =>
     `<span class="chip" data-s="${sym}" title="点击切换到该标的"><i style="background:${OV_COLORS[i % OV_COLORS.length]}"></i>${(quotes[sym] || {}).name || displayCode(sym)}<b data-x="${sym}" title="移除叠加">✕</b></span>`).join("");
 }
 function addOverlay(sym) {
   sym = normSymbol(sym) || sym;
-  if (!sym || state.overlays.includes(sym) || sym === state.selected) return;
-  if (state.overlays.length >= 5) return toast("最多叠加 5 个");
-  state.overlays.push(sym); save();
+  if (!sym || ovList().includes(sym) || sym === state.selected) return;
+  if (ovList().length >= 5) return toast("最多叠加 5 个");
+  setOvList([...ovList(), sym]);
   if (!quotes[sym]) fetch("/api/quotes?s=" + encodeURIComponent(sym)).then((r) => r.json()).then((d) => { Object.assign(quotes, d); renderOvChips(); ovLegend(null); }).catch(() => {});
   if (chartData) renderChart(chartData, false);
 }
 function removeOverlay(sym) {
-  state.overlays = sym ? state.overlays.filter((x) => x !== sym) : []; save();
+  setOvList(sym ? ovList().filter((x) => x !== sym) : []);
   if (chartData) renderChart(chartData, false);
 }
 $("#ovlChips").addEventListener("click", (e) => {
@@ -865,7 +872,7 @@ function ovRenderList(items) {
     || '<div class="muted">没有匹配，回车按代码添加</div>';
 }
 function ovDefaultList(q = "") {
-  const syms = [...new Set([...OV_QUICK, ...(state.groups[state.group] || [])])].filter((s) => s !== state.selected && !state.overlays.includes(s));
+  const syms = [...new Set([...OV_QUICK, ...(state.groups[state.group] || [])])].filter((s) => s !== state.selected && !ovList().includes(s));
   const items = syms.map((s) => [s, (quotes[s] || {}).name]);
   const f = q.toLowerCase();
   return f ? items.filter(([s, n]) => s.toLowerCase().includes(f) || (n || "").toLowerCase().includes(f)) : items;
@@ -949,7 +956,7 @@ setInterval(renderClocks, 1000); renderClocks();
 /* ---------- 选中 / 详情 ---------- */
 function select(s) {
   state.selected = s; save();
-  renderWatch(); renderDetail(); loadChart(true);
+  renderWatch(); renderDetail(); renderOvChips(); loadChart(true);
   if (!quotes[s]) refresh();
   // 供资讯面板 / Agent 等模块订阅：当前选中的标的变化
   const q = quotes[s] || {};
@@ -1146,8 +1153,8 @@ function symbolItems(s) {
   const items = [
     { header: `${q.name || displayCode(s)}  <span class="muted">${displayCode(s)}</span>` },
     { label: "打开图表", key: "Enter", action: () => select(s) },
-    { label: (state.overlays || []).includes(s) ? "取消叠加" : "叠加到当前图表", disabled: s === state.selected,
-      action: () => ((state.overlays || []).includes(s) ? removeOverlay(s) : addOverlay(s)) },
+    { label: ovList().includes(s) ? "取消叠加" : "叠加到当前图表", disabled: s === state.selected,
+      action: () => (ovList().includes(s) ? removeOverlay(s) : addOverlay(s)) },
     { label: "切换周期", sub: Object.entries(PNAME).map(([p, n]) => ({ label: n, checked: state.selected === s && state.period === p,
       action: () => { state.period = p; save(); setSeg("#periods", "p", p); select(s); } })) },
     "-",
@@ -1229,7 +1236,7 @@ $("#chart").addEventListener("contextmenu", (e) => {
     { label: "回到最新", key: "Home", action: () => chart.timeScale().scrollToRealTime() },
     { label: "重置视图", action: () => { if (chartData) renderChart(chartData, true); } },
     { label: "叠加对比…", action: () => setTimeout(() => $("#btnOverlay").click(), 0) },
-    { label: "清除所有叠加", disabled: !(state.overlays || []).length, action: () => removeOverlay(null) },
+    { label: "清除所有叠加", disabled: !ovList().length, action: () => removeOverlay(null) },
     { label: "刷新数据", key: "F5", action: () => { klineCache.delete(kkey(s, state.period)); loadChart(false); } },
     "-",
     { label: "周期", sub: Object.entries(PNAME).map(([p, n]) => ({ label: n, checked: state.period === p,
