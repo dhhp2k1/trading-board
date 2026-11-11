@@ -20,8 +20,8 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 版本戳：每次发版改这里。顶栏会显示，桌面启动器也用它判断后台跑的是不是旧版本
-VERSION = "0.7.2"
-BUILD = "2026-11-10 13:35"
+VERSION = "0.8.0"
+BUILD = "2026-11-11 14:30"
 
 PORT = int(os.environ.get("BOARD_PORT", "8765"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -519,6 +519,11 @@ try:
     import news  # noqa: E402
 except ImportError:
     news = None
+# ecocal.py 投资日历：提供 handle(qs)（不叫 calendar.py，免得和标准库 calendar 重名）
+try:
+    import ecocal  # noqa: E402
+except ImportError:
+    ecocal = None
 try:
     import updater  # noqa: E402
 except ImportError:
@@ -620,6 +625,10 @@ class Handler(SimpleHTTPRequestHandler):
                 if news is None:
                     return self.send_json({"error": "news.py 尚未就绪"}, 501)
                 return self.send_json(news.handle(qs))
+            if u.path == "/api/calendar":
+                if ecocal is None:
+                    return self.send_json({"error": "ecocal.py 尚未就绪"}, 501)
+                return self.send_json(ecocal.handle(qs))
             if u.path == "/api/search":
                 return self.send_json(search(qs.get("q", [""])[0]))
         except Exception as e:  # noqa: BLE001
