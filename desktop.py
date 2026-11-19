@@ -26,7 +26,7 @@ PORT = int(os.environ.get("BOARD_PORT", "8765"))
 os.environ["BOARD_PORT"] = str(PORT)
 
 DEFAULT_W, DEFAULT_H = 1440, 900
-MIN_W, MIN_H = 960, 600
+MIN_W, MIN_H = 240, 200
 
 # Bloomberg 风格标题栏：纯黑底、琥珀色标题字（Windows 11 才支持改颜色，Windows 10 只变成深色）
 CAPTION_RGB = (0x00, 0x00, 0x00)
@@ -440,7 +440,7 @@ def make_main_window(desk, start_mini=False):
     window = webview.create_window(
         TITLE, url,
         width=state_w["width"], height=state_w["height"], x=state_w["x"], y=state_w["y"],
-        min_size=(240, 200), maximized=state_w["maximized"],
+        min_size=(MIN_W, MIN_H), maximized=state_w["maximized"],
         background_color="#000000", text_select=True, js_api=desk,
     )
 

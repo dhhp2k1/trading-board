@@ -85,8 +85,16 @@
         <button data-t="bar" title="美国线（OHLC）">美国线</button>
         <button data-t="line" title="收盘价折线">折线</button>
       </div>
+      <div class="seg" id="drawTools" role="group" aria-label="划线">
+        <button data-draw="trend" aria-pressed="false" title="点击两个点绘制趋势线" disabled>趋势线</button>
+        <button data-draw="horizontal" aria-pressed="false" title="点击价格绘制水平线" disabled>水平线</button>
+        <button id="drawUndo" title="撤销当前图表的最后一条线" disabled>撤销划线</button>
+      </div>
     </div>
-    <div id="chart"></div>
+    <div id="chartFrame">
+      <div id="chart"></div>
+      <div id="drawHint" role="status" hidden></div>
+    </div>
     <div id="legend" class="muted"></div>
   </section>
 
@@ -188,6 +196,7 @@
 </dialog>
 
 <script src="lightweight-charts.standalone.production.js"></script>
+<script src="chart-drawings.js"></script>
 <script src="app.js"></script>
 <script src="news.js" onerror="void 0"></script>
 <script src="ecocal.js" onerror="void 0"></script>

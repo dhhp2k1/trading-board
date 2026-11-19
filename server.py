@@ -8,6 +8,7 @@
 """
 import calendar
 import json
+import math
 import os
 import re
 import sys
@@ -20,13 +21,15 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 版本戳：每次发版改这里。顶栏会显示，桌面启动器也用它判断后台跑的是不是旧版本
-VERSION = "0.8.0"
-BUILD = "2026-11-11 14:30"
+VERSION = "0.8.1"
+BUILD = "2026-11-19 11:31"
 
 PORT = int(os.environ.get("BOARD_PORT", "8765"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36"
 POOL = ThreadPoolExecutor(max_workers=32)
+SPARK_POOL = ThreadPoolExecutor(max_workers=24)
+BJ_OFF = 8 * 3600  # 图表分钟线的秒数使用北京时间显示坐标
 
 _cache = {}
 _cache_lock = threading.Lock()
@@ -59,6 +62,16 @@ def fnum(x):
         return None
 
 
+def market_day(ts, offset=0):
+    return time.strftime("%Y-%m-%d", time.gmtime(ts + offset))
+
+
+def asia_quote_day(ts, opened):
+    if ts and opened and (ts + BJ_OFF) % 86400 >= (9 * 60 + 30) * 60:
+        return market_day(ts, BJ_OFF)
+    return None
+
+
 # ---------------- 腾讯：A 股 / 港股实时行情 ----------------
 def tencent_quotes(codes):
     out = {}
@@ -76,18 +89,25 @@ def tencent_quotes(codes):
             ts = body[30]
             if re.fullmatch(r"\d{14}", ts):
                 ts = f"{ts[:4]}-{ts[4:6]}-{ts[6:8]} {ts[8:10]}:{ts[10:12]}:{ts[12:14]}"
+            try:
+                timestamp = calendar.timegm(time.strptime(ts.replace("/", "-"), "%Y-%m-%d %H:%M:%S")) - BJ_OFF
+            except ValueError:
+                timestamp = None
+            opened = fnum(body[5])
             out[code] = {
                 "symbol": code,
                 "name": body[1],
                 "price": price,
                 "prevClose": prev,
-                "open": fnum(body[5]),
+                "open": opened,
                 "high": fnum(body[33]),
                 "low": fnum(body[34]),
                 "change": chg,
                 "pct": (chg / prev * 100) if chg is not None else None,
                 "volume": fnum(body[6]),
                 "time": ts,
+                "timestamp": timestamp,
+                "sparkDay": asia_quote_day(timestamp, opened),
                 "source": "腾讯",
             }
             # 场内基金：腾讯第 77/78/81 项分别是 溢价率%、实时 IOPV（参考净值）、上一交易日单位净值
@@ -137,6 +157,8 @@ def yahoo_quote(sym):
         "pct": (chg / prev * 100) if chg is not None else None,
         "volume": meta.get("regularMarketVolume"),
         "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(t)) if t else "",
+        "timestamp": t,
+        "sparkDay": yahoo_session_day(t, meta) if t else None,
         "currency": meta.get("currency"),
         "type": meta.get("instrumentType"),
         "source": "雅虎",
@@ -173,12 +195,13 @@ def em_hk_quotes(codes):
         code = sid2code.get(f"{it.get('f13')}.{it.get('f12')}")
         if not code or not isinstance(it.get("f2"), (int, float)):
             continue
-        t = it.get("f124")
+        t = fnum(it.get("f124")) or None
         out[code] = {
             "symbol": code, "name": it.get("f14"), "price": it["f2"], "prevClose": fnum(it.get("f18")),
             "open": fnum(it.get("f17")), "high": fnum(it.get("f15")), "low": fnum(it.get("f16")),
             "change": fnum(it.get("f4")), "pct": fnum(it.get("f3")), "volume": fnum(it.get("f5")),
             "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(t)) if t else "",
+            "timestamp": t, "sparkDay": asia_quote_day(t, fnum(it.get("f17"))),
             "source": "东方财富",
         }
     return out
@@ -285,12 +308,19 @@ def em_kline(symbol, period, end=None):
             bars = []
             for row in data["trends"]:
                 f = row.split(",")
-                o, c, h, lo = float(f[1]), float(f[2]), float(f[3]), float(f[4])
-                if o <= 0:  # 历史日的分时数据没有开盘价，用上一分钟收盘价代替
-                    o = bars[-1]["close"] if bars else c
-                h, lo = max(h, o, c), min(x for x in (lo, o, c) if x > 0)
+                if len(f) < 8:
+                    continue
+                o, c, h, lo = (fnum(x) for x in f[1:5])
+                if not c or not math.isfinite(c) or c <= 0:  # 跳过开盘前的占位记录
+                    continue
+                if not o or not math.isfinite(o) or o <= 0:
+                    o = bars[-1]["close"] if bars and market_day(bars[-1]["time"]) == f[0][:10] else c
+                h = max(x for x in (h, o, c) if x is not None and math.isfinite(x))
+                lo = min(x for x in (lo, o, c) if x is not None and math.isfinite(x) and x > 0)
                 bars.append({"time": bj_ts(f[0]), "value": c, "open": o, "high": h, "low": lo, "close": c,
-                             "volume": float(f[5]), "avg": fnum(f[7])})
+                             "volume": fnum(f[5]) or 0, "avg": fnum(f[7])})
+            if not bars:
+                continue
             return {"type": "line" if period == "min" else "candle", "bars": bars,
                     "prevClose": data.get("preClose"), "source": "东方财富"}
         data = em_get("/api/qt/stock/kline/get", {
@@ -325,40 +355,78 @@ def fallback_kline(symbol, period):
         raise ValueError("；".join(errors)) from e
 
 
+def spark_points(points, prev, day):
+    step = max(1, math.ceil((len(points) - 1) / 59))
+    sampled = points[::step]
+    if sampled[-1][0] != points[-1][0]:
+        sampled.append(points[-1])
+    return {"pts": [price for _, price in sampled], "prev": prev, "day": day, "last": points[-1][0]}
+
+
+def yahoo_session_day(ts, meta):
+    regular = (meta.get("currentTradingPeriod") or {}).get("regular") or {}
+    if regular.get("start", 0) <= ts < regular.get("end", 0):
+        ts = regular["end"] - 1  # 跨午夜的合约按交易时段结束日归属
+    return market_day(ts, meta.get("gmtoffset") or 0)
+
+
+def yahoo_spark(symbol):
+    d = yahoo_chart(to_yahoo_symbol(symbol), "1d", "1m")
+    meta = d.get("meta") or {}
+    closes = ((d.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []
+    points = sorted({t: p for t, p in zip(d.get("timestamp") or [], closes)
+                     if isinstance(p, (int, float)) and math.isfinite(p)}.items())
+    if not points:
+        return None
+    return spark_points(points, meta.get("previousClose") or meta.get("chartPreviousClose"),
+                        yahoo_session_day(points[-1][0], meta))
+
+
+def asia_spark(d):
+    points = sorted({b["time"] - BJ_OFF: b["value"] for b in d["bars"]
+                     if math.isfinite(b["value"]) and b["value"] > 0}.items())
+    if not points:
+        return None
+    day = market_day(points[-1][0], BJ_OFF)
+    start = calendar.timegm(time.strptime(day, "%Y-%m-%d")) - BJ_OFF
+    first = next(i for i, (t, _) in enumerate(points) if t >= start)
+    prev = points[first - 1][1] if first else fnum(d.get("prevClose"))
+    return spark_points(points[first:], prev, day)
+
+
 def spark(symbol):
-    """自选列表里的日内走势小图：最近一个交易日的分时，压缩到 ≤80 个点。缓存 60 秒。"""
     def build():
-        d = kline(symbol, "min")
-        bars = d.get("bars") or []
-        if not bars:
-            return None
-        def day(t):
-            return time.strftime("%Y-%m-%d", time.gmtime(t)) if isinstance(t, (int, float)) else str(t)[:10]
-        last = day(bars[-1]["time"])
-        today = [b for b in bars if day(b["time"]) == last]
-        vals = [b.get("value", b.get("close")) for b in today]
-        vals = [v for v in vals if v is not None]
-        step = max(1, -(-len(vals) // 60))
-        pts = vals[::step]
-        if vals and pts[-1] != vals[-1]:
-            pts.append(vals[-1])
-        prev = d.get("prevClose")
-        if not prev:  # 没给昨收：取上一交易日最后一笔
-            older = [b for b in bars if day(b["time"]) < last]
-            if older:
-                prev = older[-1].get("value", older[-1].get("close"))
-        return {"pts": [round(v, 4) for v in pts], "prev": prev, "day": last}
-    return cached("spark:" + symbol, 60, build)
+        if symbol.startswith("yf:"):
+            return yahoo_spark(symbol)
+        now = time.time()
+        today = asia_quote_day(now, time.gmtime(now + BJ_OFF).tm_wday < 5)
+        sources = (em_kline, tencent_kline) if symbol.startswith("hk") else (tencent_kline, em_kline)
+        latest = None
+        for source in sources:
+            try:
+                data = asia_spark(source(symbol, "min"))
+            except Exception:  # noqa: BLE001  单个数据源失败时继续取备用源
+                continue
+            if data and (not latest or data["last"] > latest["last"]):
+                latest = data
+                if not today or data["day"] >= today:
+                    break
+        return latest or yahoo_spark(symbol)
+    return cached(("spark", symbol), 12, build)
 
 
 def sparks(symbols):
-    futs = {s: POOL.submit(spark, s) for s in symbols[:80]}
+    futs = {SPARK_POOL.submit(spark, s): s for s in dict.fromkeys(symbols[:80])}
+    done, pending = wait(futs, timeout=12)
     out = {}
-    for s, f in futs.items():
+    for f in done:
         try:
-            out[s] = f.result(timeout=12)
+            out[futs[f]] = f.result()
         except Exception:  # noqa: BLE001
-            out[s] = None
+            out[futs[f]] = None
+    for f in pending:
+        f.cancel()
+        out[futs[f]] = None
     return out
 
 
@@ -390,20 +458,27 @@ def kline(symbol, period):
 
 def tencent_kline(symbol, period):
     if period == "min":
-        d = json.loads(http_get(f"https://web.ifzq.gtimg.cn/appstock/app/minute/query?code={symbol}"))
+        d = json.loads(http_get(f"https://web.ifzq.gtimg.cn/appstock/app/minute/query?code={symbol}", timeout=4))
         node = d["data"][symbol]["data"]
-        date = node.get("date") or time.strftime("%Y%m%d")
+        date = node["date"]
         bars, last_vol = [], 0.0
         for row in node["data"]:
-            hhmm, price, cumvol = row.split()[:3]
+            fields = row.split()
+            if len(fields) < 3:
+                continue
+            hhmm, price, cumvol = fields[:3]
+            pv = fnum(price)
+            if not pv or not math.isfinite(pv) or pv <= 0:
+                continue
             # 按"显示时间"转成 UTC 秒数，图表横轴直接显示北京时间，不受本机时区影响
             ts = calendar.timegm(time.strptime(date + hhmm, "%Y%m%d%H%M"))
-            vol = float(cumvol) - last_vol
-            last_vol = float(cumvol)
-            pv = float(price)
+            total_vol = fnum(cumvol)
+            vol = (total_vol - last_vol) if total_vol is not None else 0
+            if total_vol is not None:
+                last_vol = total_vol
             bars.append({"time": int(ts), "value": pv, "open": pv, "high": pv, "low": pv, "close": pv,
                          "volume": max(vol, 0)})
-        return {"type": "line", "bars": bars}
+        return {"type": "line", "bars": bars, "source": "腾讯"}
     d = json.loads(http_get(
         f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},{period},,,640,qfq"))
     node = d["data"][symbol]
@@ -418,7 +493,6 @@ def tencent_kline(symbol, period):
 YF_IV = {"min": ("5d", "1m"), "m1": ("5d", "1m"), "m5": ("1mo", "5m"), "m15": ("1mo", "15m"),
          "m30": ("1mo", "30m"), "m60": ("6mo", "60m"), "day": ("2y", "1d"), "week": ("10y", "1wk"),
          "month": ("max", "1mo")}
-BJ_OFF = 8 * 3600  # 分钟级数据统一按北京时间显示（东方财富的美股分钟线也是北京时间），保证能前后拼接
 
 
 def yahoo_kline(ysym, period, period1=None, period2=None):

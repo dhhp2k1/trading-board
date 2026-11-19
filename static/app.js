@@ -248,41 +248,70 @@ function rangeBar(q) {
   return `<div class="rng" title="今日 低 ${fmt(q.low)} — 高 ${fmt(q.high)}"><b style="width:${pos(q.price)}%;background:rgba(${c.join(",")},.55)"></b>${pc}<i class="now" style="left:${pos(q.price)}%"></i></div>`;
 }
 
-/* 走势小图数据：按需批量取，60 秒内不重复请求；最后一个点用实时价 */
+/* 自选分时：开盘换日或首批分钟线缺失时加快重试。 */
 const sparkData = {}, sparkAt = {};
-let sparkTimer = null;
+let sparkLoading = false;
 function needSparks(list) {
-  if (!look().spark && look().view !== "heat") return;
+  if (sparkLoading || (!look().spark && look().view !== "heat")) return;
   const now = Date.now();
-  const want = list.filter((s) => !sparkAt[s] || now - sparkAt[s] > 60000);
-  if (!want.length || sparkTimer) return;
-  want.forEach((s) => (sparkAt[s] = now));
-  sparkTimer = setTimeout(async () => {
-    sparkTimer = null;
-    for (let i = 0; i < want.length; i += 20) {
-      try {
-        const d = await (await fetch("/api/spark?s=" + encodeURIComponent(want.slice(i, i + 20).join(",")))).json();
-        Object.entries(d).forEach(([k, v]) => { if (v) sparkData[k] = v; });
-        renderWatch();
-      } catch (_) { /* 取不到就不画 */ }
-    }
-  }, 200);
+  const want = list.map((s) => ({ s, day: quotes[s]?.sparkDay })).filter(({ s, day }) => {
+    const last = sparkAt[s], data = sparkData[s];
+    const early = !data || data.pts.length < 2 || (day && day > data.day);
+    return !last || (day && day !== last.day) || now - last.at >= (early ? 12000 : 45000);
+  });
+  if (!want.length) return;
+  sparkLoading = true;
+  setTimeout(() => loadSparks(want), 200);
 }
-function sparkSvg(s, q) {
-  const d = sparkData[s]; if (!d || !d.pts || d.pts.length < 2) return '<svg class="sp"></svg>';
-  const pts = d.pts.slice(); if (q.price != null) pts[pts.length - 1] = q.price;
-  const base = d.prev ?? pts[0];
-  let lo = Math.min(base, ...pts), hi = Math.max(base, ...pts); if (hi === lo) { hi += 1e-9; lo -= 1e-9; }
+async function loadSparks(want) {
+  for (let i = 0; i < want.length; i += 20) {
+    const batch = want.slice(i, i + 20);
+    try {
+      const response = await fetch("/api/spark?s=" + encodeURIComponent(batch.map(({ s }) => s).join(",")));
+      if (response.ok) {
+        const data = await response.json();
+        for (const { s } of batch) {
+          const next = data[s];
+          if (next?.pts?.length && (!sparkData[s] || next.last >= sparkData[s].last)) sparkData[s] = next;
+        }
+      }
+    } catch (_) { /* 短暂断连时保留最后一份可用数据。 */ }
+    const at = Date.now();
+    for (const { s, day } of batch) sparkAt[s] = { at, day };
+    if (i + 20 < want.length) renderWatch();
+  }
+  sparkLoading = false;
+  renderWatch();
+}
+function sparkSvg(s, q, heat = false) {
+  const d = sparkData[s];
+  const hasQuote = q.sparkDay && Number.isFinite(q.price) && Number.isFinite(q.timestamp);
+  const isNewSession = hasQuote && (!d || q.sparkDay > d.day);
+  let pts = d?.pts.slice() || [];
+  if (isNewSession) {
+    pts = Number.isFinite(q.open) && q.open > 0 && q.open !== q.price ? [q.open, q.price] : [q.price];
+  } else if (hasQuote && q.sparkDay === d?.day && q.timestamp >= d.last) {
+    if (Math.floor(q.timestamp / 60) === Math.floor(d.last / 60)) pts[pts.length - 1] = q.price;
+    else pts.push(q.price);
+  }
+  const className = heat ? "sp tsp" : "sp";
+  if (!pts.length) return `<svg class="${className}"></svg>`;
+  const hasSessionBaseline = hasQuote && (isNewSession || q.sparkDay === d?.day) && Number.isFinite(q.prevClose) && q.prevClose !== 0;
+  const baseline = hasSessionBaseline ? q.prevClose : isNewSession ? null : d?.prev;
+  const base = Number.isFinite(baseline) && baseline !== 0 ? baseline : pts[0];
+  let lo = Math.min(base, ...pts), hi = Math.max(base, ...pts);
+  if (hi === lo) { hi += 1e-9; lo -= 1e-9; }
   const W = 64, H = 18, n = Math.max(pts.length - 1, 1);
-  const y = (v) => (H - 1 - (v - lo) / (hi - lo) * (H - 2)).toFixed(1);
+  const y = (v) => (H - 2 - (v - lo) / (hi - lo) * (H - 4)).toFixed(1);
   const line = pts.map((v, i) => `${(i / n * W).toFixed(1)},${y(v)}`).join(" ");
-  const c = `rgb(${upDownRGB((pts[pts.length - 1] - base) || 0).join(",")})`;
-  const id = "g" + s.replace(/[^a-z0-9]/gi, "");
-  return `<svg class="sp" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c}" stop-opacity=".35"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></linearGradient></defs>
+  const c = `rgb(${upDownRGB(pts[pts.length - 1] - base).join(",")})`;
+  const id = "g" + (heat ? "heat" : "list") + s.replace(/[^a-z0-9]/gi, "");
+  return `<svg class="${className}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
     <line x1="0" x2="${W}" y1="${y(base)}" y2="${y(base)}" class="base"/>
-    <polygon points="0,${H} ${line} ${W},${H}" fill="url(#${id})"/>
-    <polyline points="${line}" fill="none" stroke="${c}" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>`;
+    ${pts.length === 1 ? `<circle cx="${W / 2}" cy="${y(pts[0])}" r="2" fill="${c}"/>` : `
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c}" stop-opacity=".35"/><stop offset="1" stop-color="${c}" stop-opacity="0"/></linearGradient></defs>
+      <polygon points="0,${H} ${line} ${W},${H}" fill="url(#${id})"/>
+      <polyline points="${line}" fill="none" stroke="${c}" stroke-width="1.2" vector-effect="non-scaling-stroke"/>`}</svg>`;
 }
 
 /* 热力图视图：方块颜色深浅 = 涨跌幅大小 */
@@ -295,7 +324,7 @@ function renderHeat(list) {
       <div class="tn">${q.name || displayCode(s)}</div>
       <div class="tp">${pctStr(pct)}</div>
       <div class="tq">${fmt(q.price)}${q.premium != null ? ` · 溢${pctStr(q.premium)}` : ""}</div>
-      ${sparkSvg(s, q).replace('class="sp"', 'class="sp tsp"')}</div>`;
+      ${sparkSvg(s, q, true)}</div>`;
   }).join("");
 }
 $("#heat").addEventListener("click", (e) => { const t = e.target.closest(".tile"); if (t) select(t.dataset.s); });
@@ -651,10 +680,15 @@ const chart = LW.createChart($("#chart"), {
 });
 let series = [];
 let mainSeries = null, chartData = null, iopvLine = null;
+const drawings = createChartDrawings(chart, state.drawings ||= {}, save);
 function colors() {
   return state.redUp ? { up: "#ff3b3b", down: "#26d07c" } : { up: "#26d07c", down: "#ff3b3b" };
 }
-function clearSeries() { series.forEach((s) => chart.removeSeries(s)); series = []; mainSeries = null; ovSeries = []; }
+function clearSeries() {
+  drawings.bind(null);
+  series.forEach((s) => chart.removeSeries(s));
+  series = []; mainSeries = null; ovSeries = [];
+}
 
 function ma(bars, n) {
   const out = []; let sum = 0;
@@ -709,7 +743,7 @@ let shownKey = null;   // 图上当前显示的是哪个 标的|周期
 let chartReq = 0;
 
 /* 画图：fit=true 时按新数据重新定位视野；fit=false 时保留当前视野（只用于同一标的同一周期的刷新） */
-function renderChart(d, fit) {
+function renderChart(d, fit, key = shownKey) {
   const s = state.selected;
   const keepRange = fit ? null : chart.timeScale().getVisibleLogicalRange();
   clearSeries();
@@ -773,6 +807,7 @@ function renderChart(d, fit) {
   }
   else if (n > 160) chart.timeScale().setVisibleLogicalRange({ from: n - 160, to: n + 4 });
   else chart.timeScale().fitContent();
+  drawings.bind(mainSeries, key);
   drawOverlays();
   showLegend(null);
 }
@@ -781,10 +816,11 @@ async function loadChart(fit = true) {
   if (MINI) return;
   const s = state.selected, p = state.period; if (!s) return;
   const k = kkey(s, p);
+  drawings.setKey(k);
   if (k !== shownKey) fit = true;           // 换了标的或周期，一定重新定位视野
   const my = ++chartReq;
   const hit = klineCache.get(k);
-  if (hit && fit) { renderChart(hit.d, true); shownKey = k; }
+  if (hit && fit) { renderChart(hit.d, true, k); shownKey = k; }
   if (hit && Date.now() - hit.at < maxAge(p)) { prefetch(s); return; }
   if (!hit && fit) $("#legend").textContent = "加载中…";
   let d;
@@ -798,7 +834,7 @@ async function loadChart(fit = true) {
     const older = chartData.bars.filter((b) => b.time < first);
     if (older.length) { d = Object.assign({}, d, { bars: older.concat(d.bars) }); klineCache.set(k, { d, at: Date.now() }); }
   }
-  renderChart(d, !hit && fit);
+  renderChart(d, !hit && fit, k);
   shownKey = k;
   prefetch(s);
 }
@@ -808,6 +844,7 @@ let loadingOlder = false;
 const exhausted = new Set();
 chart.timeScale().subscribeVisibleLogicalRangeChange((r) => {
   if (!r || r.from > 15 || loadingOlder || !chartData || !shownKey) return;
+  if (shownKey !== kkey(state.selected, state.period)) return;
   if (exhausted.has(shownKey)) return;
   loadOlder();
 });
@@ -1058,6 +1095,7 @@ document.addEventListener("click", (e) => { if (!e.target.closest("#ovl")) $("#o
 
 /* 日/周/月 K 线的最后一根随实时报价更新，不必整张图重载 */
 function patchLastBar() {
+  if (shownKey !== kkey(state.selected, state.period)) return;
   const qq = quotes[state.selected] || {};
   if (iopvLine && qq.iopv) iopvLine.applyOptions({ price: qq.iopv });
   if (!chartData || chartData.type !== "candle" || !mainSeries) return;
@@ -1151,12 +1189,16 @@ $("#redUp").onchange = (e) => {
 };
 
 /* ---------- 智能缩放：字号随窗口宽度和屏幕缩放自动调整，Ctrl+滚轮 / Ctrl +/−/0 手动微调 ---------- */
+let zoomFrame = 0;
+let appliedFontSize = 0;
 function applyZoom(showTip) {
-  // 以 1600 宽为基准 12.5px；按窗口宽高中更紧的一边缩放，限制在 11–20px
-  const auto = Math.min(innerWidth / 1600, innerHeight / 860);
-  const px = Math.max(11, Math.min(20, 12.5 * Math.max(0.85, auto) * (state.zoom || 1)));
-  document.documentElement.style.fontSize = px.toFixed(2) + "px";
-  chart.applyOptions({ layout: { fontSize: Math.round(px * 0.88) } });
+  const auto = Math.max(10.5, Math.min(16, 12.5 * Math.min(innerWidth / 1600, innerHeight / 860)));
+  const px = Math.round(auto * (state.zoom || 1) * 100) / 100;
+  if (px !== appliedFontSize) {
+    appliedFontSize = px;
+    document.documentElement.style.fontSize = `${px}px`;
+    chart.applyOptions({ layout: { fontSize: Math.round(px * 0.88) } });
+  }
   if (showTip) {
     let t = $("#zoomtip"); if (!t) { t = document.createElement("div"); t.id = "zoomtip"; document.body.appendChild(t); }
     t.textContent = `缩放 ${Math.round((state.zoom || 1) * 100)}%`; t.classList.add("on");
@@ -1164,8 +1206,16 @@ function applyZoom(showTip) {
   }
 }
 function setZoom(z) { state.zoom = Math.max(0.6, Math.min(2, Math.round(z * 100) / 100)); save(); applyZoom(true); }
-addEventListener("resize", () => applyZoom(false));
-addEventListener("wheel", (e) => { if (!e.ctrlKey) return; e.preventDefault(); setZoom((state.zoom || 1) * (e.deltaY < 0 ? 1.1 : 1 / 1.1)); }, { passive: false });
+addEventListener("resize", () => {
+  if (zoomFrame) return;
+  zoomFrame = requestAnimationFrame(() => { zoomFrame = 0; applyZoom(false); });
+});
+addEventListener("wheel", (e) => {
+  if (!e.ctrlKey || !e.deltaY) return;
+  e.preventDefault();
+  e.stopPropagation();
+  setZoom((state.zoom || 1) * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+}, { capture: true, passive: false });
 addEventListener("keydown", (e) => {
   if (!e.ctrlKey) return;
   if (e.key === "=" || e.key === "+") { e.preventDefault(); setZoom((state.zoom || 1) * 1.1); }
@@ -1489,7 +1539,7 @@ function dragger(el, onMove, onReset) {
   left.appendChild(sp);
   dragger(sp, (ev) => {
     const x = ev.clientX - left.getBoundingClientRect().left;
-    state.leftW = Math.round(Math.max(220, Math.min(window.innerWidth * 0.45, x))); applyLayout();
+    state.leftW = Math.round(Math.min(window.innerWidth * 0.42, Math.max(220, x))); applyLayout();
   }, () => { state.leftW = null; });
   const th = $("#watch thead th");
   const cs = document.createElement("span"); cs.className = "colsplit"; cs.title = "拖动调整名称列宽度，双击恢复默认";

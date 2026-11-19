@@ -25,24 +25,25 @@ code { background: #1a1408; padding: 0 4px; }
 ::-webkit-scrollbar-thumb { background: var(--border2); }
 
 /* 顶栏：命令行 + 世界时钟 */
-#topbar { display: flex; align-items: center; gap: 12px; padding: 4px 8px; background: #000; border-bottom: 1px solid var(--line); }
+#topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 4px 8px; background: #000; border-bottom: 1px solid var(--line); }
 .logo { color: var(--head); font-weight: 700; letter-spacing: 1px; }
 .logo b { color: #000; background: var(--head); padding: 0 4px; margin-left: 2px; }
-.cmd { position: relative; flex: 1; display: flex; align-items: center; max-width: 640px;
+.cmd { position: relative; flex: 1 1 14rem; min-width: 0; display: flex; align-items: center; max-width: 640px;
   border: 1px solid var(--border2); background: var(--input); }
 .cmd .prompt { color: var(--head); padding: 0 6px; }
-.cmd input { flex: 1; border: none; background: transparent; color: var(--white); padding: 3px 0; }
+.cmd input { flex: 1; min-width: 0; border: none; background: transparent; color: var(--white); padding: 3px 0; }
 .cmd input:focus { outline: none; }
 .cmd .go { background: #1f9d3a; color: #000; padding: 1px 8px; font-weight: 700; cursor: pointer; }
 #suggest { position: absolute; left: -1px; right: -1px; top: 100%; z-index: 20; background: var(--input);
   border: 1px solid var(--head); display: none; }
 #suggest div { padding: 3px 8px; cursor: pointer; color: var(--white); }
 #suggest div:hover { background: var(--head); color: #000; }
-#clocks { margin-left: auto; display: flex; gap: 14px; white-space: nowrap; }
+#clocks { margin-left: auto; display: flex; flex-wrap: wrap; gap: 2px 14px; white-space: nowrap; }
 #clocks span b { color: var(--white); font-weight: normal; }
 
 /* 指数条 */
-#ticker { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); border-bottom: 1px solid var(--line); }
+#ticker { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  flex: 0 0 auto; max-height: 7rem; overflow: auto; border-bottom: 1px solid var(--line); }
 .tk { padding: 2px 8px; cursor: pointer; border-right: 1px solid #141414; border-bottom: 1px solid #141414;
   display: flex; justify-content: space-between; gap: 6px; white-space: nowrap; }
 .tk:hover { background: var(--hl); }
@@ -51,8 +52,9 @@ code { background: #1a1408; padding: 0 4px; }
 .tk .p small { font-size: 0.88rem; }
 
 /* 三栏 */
-main { flex: 1; display: grid; grid-template-columns: var(--leftW, 27rem) minmax(0, 1fr) 25.6rem; min-height: 0; gap: 1px; background: var(--line); }
-.panel { background: var(--panel); min-height: 0; display: flex; flex-direction: column; }
+main { flex: 1; display: grid; grid-template-columns: min(var(--leftW, 27rem), 42%) minmax(0, 1fr) min(25.6rem, 25%);
+  grid-template-rows: minmax(0, 1fr); min-height: 265px; gap: 1px; background: var(--line); }
+.panel { background: var(--panel); min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .ph { background: var(--head); color: var(--head-text); padding: 1px 6px; font-weight: 700;
   display: flex; align-items: baseline; gap: 8px; white-space: nowrap; overflow: hidden; }
 .ph .pn { background: #000; color: var(--head); padding: 0 5px; }
@@ -85,10 +87,10 @@ main { flex: 1; display: grid; grid-template-columns: var(--leftW, 27rem) minmax
 .flash-up { animation: fu .9s; } .flash-down { animation: fd .9s; }
 @keyframes fu { from { background: rgba(255,59,59,.35); } }
 @keyframes fd { from { background: rgba(38,208,124,.35); } }
-.leftfoot { display: flex; gap: 4px; padding: 4px; border-top: 1px solid var(--line); }
+.leftfoot { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-top: 1px solid var(--line); }
 
 /* 图表 */
-#cName { color: #000; } #cCode { color: var(--ph-muted) !important; }
+#cName { color: #000; min-width: 0; overflow: hidden; text-overflow: ellipsis; } #cCode { color: var(--ph-muted) !important; }
 .big { font-size: 1.12rem; color: #000; }
 #cPct.up, #cPrice.up, #cPct.down, #cPrice.down { color: #000; }
 .toolbar { display: flex; justify-content: space-between; padding: 3px 4px; border-bottom: 1px solid var(--line); gap: 8px; flex-wrap: wrap; }
@@ -96,11 +98,19 @@ main { flex: 1; display: grid; grid-template-columns: var(--leftW, 27rem) minmax
 .seg button { border-right-width: 0; padding: 1px 8px; }
 .seg button:last-child { border-right-width: 1px; }
 .seg button.on { background: var(--head); color: #000; }
-#chart { flex: 1; min-height: 200px; }
+.toolbar .seg { flex-wrap: wrap; max-width: 100%; gap: 1px; }
+.toolbar .seg button { border-right-width: 1px; white-space: nowrap; }
+#chartFrame { flex: 1 1 0; min-height: 0; position: relative; }
+#chart { position: absolute; inset: 0; }
+#chart.drawing canvas { cursor: crosshair; }
+#drawTools button[aria-pressed="true"] { background: var(--head); color: #000; }
+#drawHint { position: absolute; z-index: 2; top: 8px; right: min(7rem, 25%); padding: 2px 6px;
+  background: var(--pop); color: var(--white); pointer-events: none; }
 #legend { padding: 2px 6px; font-size: 0.92rem; height: 1.6rem; border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
 #legend b { font-weight: normal; }
 
-footer { display: flex; justify-content: space-between; padding: 2px 8px; border-top: 1px solid var(--line); color: var(--muted); }
+footer { display: flex; flex-wrap: wrap; gap: 2px 8px; justify-content: space-between; padding: 2px 8px;
+  border-top: 1px solid var(--line); color: var(--muted); }
 footer select { padding: 0 4px; }
 
 dialog { background: #000; color: var(--text); border: 1px solid var(--head); padding: 0; width: min(56rem, 92vw); }
@@ -113,7 +123,7 @@ dialog textarea { width: 100%; margin: 6px 0; color: var(--white); }
 .tk .n sup { font-size: 0.72rem; color: #000; background: #ffd400; padding: 0 2px; margin-left: 2px; }
 #watch td .ext { font-size: 0.88rem; margin-left: 4px; }
 
-.ver { color: var(--muted); font-size: 0.88rem; white-space: nowrap; }
+.ver { color: var(--muted); font-size: 0.88rem; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 
 /* 右键菜单 */
 #ctxmenu, #ctxmenu .submenu { position: fixed; z-index: 100; min-width: 15rem; background: var(--pop); border: 1px solid var(--head);
@@ -137,8 +147,17 @@ dialog textarea { width: 100%; margin: 6px 0; color: var(--white); }
 /* 面板编号徽标没有实际用途，隐藏 */
 .ph .pn { display: none; }
 /* 窗口太窄时收起右栏，再窄收起左栏 */
-@media (max-width: 1100px) { main { grid-template-columns: var(--leftW, 24rem) minmax(0, 1fr); } #right { display: none; } }
-@media (max-width: 760px) { main { grid-template-columns: 1fr; } #left { display: none; } }
+@media (max-width: 1100px) {
+  main { grid-template-columns: min(var(--leftW, 24rem), 42%) minmax(0, 1fr); }
+  #right { display: none; }
+}
+@media (max-width: 700px) {
+  main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(275px, 1fr) clamp(125px, 26vh, 210px); min-height: 400px; }
+  #center { grid-row: 1; }
+  #left { grid-row: 2; }
+  #clocks, .vsplit, #cCode { display: none; }
+  #ticker { max-height: 4.5rem; }
+}
 #zoomtip { position: fixed; right: 12px; top: 40px; background: var(--head); color: #000; padding: 2px 10px; font-weight: 700;
   opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 102; }
 #zoomtip.on { opacity: 1; }
@@ -168,7 +187,7 @@ button.danger:hover:not(:disabled) { background: #ff3b3b; color: #000; }
 .ver.updfail::after { content: " · 检查更新失败"; color: #ff6b6b; }
 
 /* 曲线叠加 */
-#ovl { position: relative; display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; overflow: visible; }
+#ovl { position: relative; display: flex; align-items: center; gap: 4px; flex: 1 1 5rem; min-width: 0; overflow: visible; }
 #btnOverlay { padding: 1px 8px; white-space: nowrap; }
 #ovlChips { display: flex; gap: 4px; overflow: hidden; }
 #ovl .chip { display: inline-flex; align-items: center; gap: 4px; padding: 0 4px 0 6px; border: 1px solid var(--border2); color: var(--white);
@@ -177,13 +196,12 @@ button.danger:hover:not(:disabled) { background: #ff3b3b; color: #000; }
 #ovl .chip i, #ovLegend i { display: inline-block; width: 10px; height: 3px; }
 #ovl .chip b { color: var(--muted); font-weight: normal; padding: 0 2px; }
 #ovl .chip b:hover { color: #ff6b6b; }
-#ovlPop { display: none; position: absolute; top: 100%; left: 0; z-index: 30; width: 22rem; background: var(--pop); border: 1px solid var(--head);
+#ovlPop { display: none; position: absolute; top: 100%; left: 0; z-index: 30; width: min(22rem, 45vw); background: var(--pop); border: 1px solid var(--head);
   box-shadow: 0 6px 18px rgba(0,0,0,.7); }
 #ovlInput { width: 100%; border: none; border-bottom: 1px solid #2a2a2a; color: var(--white); padding: 4px 8px; }
 #ovlList { max-height: 22rem; overflow-y: auto; }
 #ovlList div { padding: 3px 8px; color: var(--white); cursor: pointer; }
 #ovlList div[data-s]:hover { background: var(--head); color: #000; }
-#chart { position: relative; }
 #ovLegend { position: absolute; left: 8px; top: 6px; z-index: 5; background: rgba(0,0,0,.7); padding: 3px 8px; border: 1px solid #222;
   pointer-events: none; font-size: 0.92rem; color: var(--white); }
 #ovLegend i { margin-right: 5px; vertical-align: middle; }
@@ -302,9 +320,9 @@ body.wl-dense #watch td.spk svg.sp { height: 1.7rem; }
 /* 自选栏较窄时缩小走势图、数字列，把空间留给全名 */
 #left { container-type: inline-size; }
 @container (max-width: 380px) {
-  #watch th.spk, #watch td.spk { width: 3rem; }
-  #watch th.num, #watch td.num { width: 5.4rem; }
-  #watch th.pct, #watch td.pct { width: 5.4rem; }
+  #watch th.spk, #watch td.spk { width: min(3rem, 16%); }
+  #watch th.num, #watch td.num { width: min(5.4rem, 29%); }
+  #watch th.pct, #watch td.pct { width: min(5.4rem, 29%); }
   #watch td, #watch th { padding-left: 4px; padding-right: 4px; }
 }
 
@@ -317,8 +335,8 @@ body.wl-dense #watch td.spk svg.sp { height: 1.7rem; }
 #miniBar { display: none; }
 body.mini #topbar, body.mini #ticker, body.mini #center, body.mini #right, body.mini footer,
 body.mini .leftfoot, body.mini #left > .ph, body.mini #groupTabs, body.mini .vsplit { display: none !important; }
-body.mini main { grid-template-columns: 1fr !important; }
-body.mini #left { display: flex !important; }
+body.mini main { grid-template: minmax(0, 1fr) / minmax(0, 1fr); min-height: 0; }
+body.mini #left { display: flex !important; grid-row: 1; }
 body.mini #miniBar { display: flex; align-items: center; gap: 6px; padding: 3px 4px 3px 8px; background: var(--panel);
   border-bottom: 1px solid var(--line); user-select: none; }
 body.mini #miniBar img { width: 16px; height: 16px; }
