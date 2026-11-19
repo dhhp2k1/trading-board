@@ -424,8 +424,9 @@ def start_server():
             log("server crashed:\n" + traceback.format_exc())
 
     threading.Thread(target=run, name="board-server", daemon=True).start()
-    for _ in range(100):
-        if port_open():
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if running_version() == server.VERSION:
             return True
         time.sleep(0.05)
     alert("本地服务端没能启动，详情见 " + log_path())

@@ -680,12 +680,16 @@ const chart = LW.createChart($("#chart"), {
 });
 let series = [];
 let mainSeries = null, chartData = null, iopvLine = null;
-const drawings = createChartDrawings(chart, state.drawings ||= {}, save);
+let drawings = null;
+if (typeof createChartDrawings === "function" && $("#drawTools")) {
+  try { drawings = createChartDrawings(chart, state.drawings ||= {}, save); }
+  catch (error) { console.warn("划线工具初始化失败", error); }
+}
 function colors() {
   return state.redUp ? { up: "#ff3b3b", down: "#26d07c" } : { up: "#26d07c", down: "#ff3b3b" };
 }
 function clearSeries() {
-  drawings.bind(null);
+  drawings?.bind(null);
   series.forEach((s) => chart.removeSeries(s));
   series = []; mainSeries = null; ovSeries = [];
 }
@@ -807,7 +811,7 @@ function renderChart(d, fit, key = shownKey) {
   }
   else if (n > 160) chart.timeScale().setVisibleLogicalRange({ from: n - 160, to: n + 4 });
   else chart.timeScale().fitContent();
-  drawings.bind(mainSeries, key);
+  drawings?.bind(mainSeries, key);
   drawOverlays();
   showLegend(null);
 }
@@ -816,7 +820,7 @@ async function loadChart(fit = true) {
   if (MINI) return;
   const s = state.selected, p = state.period; if (!s) return;
   const k = kkey(s, p);
-  drawings.setKey(k);
+  drawings?.setKey(k);
   if (k !== shownKey) fit = true;           // 换了标的或周期，一定重新定位视野
   const my = ++chartReq;
   const hit = klineCache.get(k);
