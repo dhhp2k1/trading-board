@@ -1156,6 +1156,75 @@ window.board = {
   select,
   displayCode,
 };
+const QUOTE_PERIODS = [["1D", "近 1 个交易日"], ["1W", "近 1 周"], ["1M", "近 1 个月"],
+  ["3M", "近 3 个月"], ["6M", "近 6 个月"], ["YTD", "年初至今"], ["1Y", "近 1 年"]];
+const QUOTE_EXCHANGES = { sh: "上交所", sz: "深交所", bj: "北交所", hk: "港交所" };
+const QUOTE_DAY = 86400000;
+const QUOTE_ESCAPE = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
+const quoteText = (value) => String(value ?? "").replace(/[&<>"]/g, (char) => QUOTE_ESCAPE[char]);
+let quoteHistoryShown, quoteHistoryRequested;
+
+function quoteMonthAgo(date, months) {
+  const y = date.getUTCFullYear(), m = date.getUTCMonth() - months;
+  const day = Math.min(date.getUTCDate(), new Date(Date.UTC(y, m + 1, 0)).getUTCDate());
+  return Date.UTC(y, m, day);
+}
+
+function quoteHistoryStats(data) {
+  const bars = Array.isArray(data?.bars) ? data.bars : [];
+  const daily = bars.filter((bar) => /^\d{4}-\d{2}-\d{2}$/.test(bar?.time) &&
+    Number.isFinite(Date.parse(bar.time)) && Number.isFinite(bar.close));
+  const last = daily.at(-1);
+  if (!last) return { returns: [] };
+  const day = new Date(last.time + "T00:00:00Z");
+  const cutoff = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const dates = [day.getTime() - 7 * QUOTE_DAY, ...[1, 3, 6].map((m) => quoteMonthAgo(day, m)),
+    Date.UTC(day.getUTCFullYear() - 1, 11, 31), quoteMonthAgo(day, 12)];
+  const bases = [daily.at(-2), ...dates.map((ms) => daily.findLast((bar) => bar.time <= cutoff(ms)))];
+  const returns = bases.map((base) => base?.close > 0 ? (last.close / base.close - 1) * 100 : null);
+  const from = cutoff(day.getTime() - 364 * QUOTE_DAY);
+  let range;
+  if (daily[0].time <= from) {
+    const recent = daily.filter((bar) => bar.time >= from && Number.isFinite(bar.high) && Number.isFinite(bar.low));
+    if (recent.length) {
+      const low = Math.min(...recent.map((bar) => bar.low)), high = Math.max(...recent.map((bar) => bar.high));
+      const position = high > low ? Math.min(100, Math.max(0, (last.close - low) / (high - low) * 100)) : null;
+      range = { low, high, position };
+    }
+  }
+  return { returns, range, date: last.time };
+}
+
+function updateQuoteHistory(s) {
+  if (MINI) return;
+  const now = Date.now(), hit = klineCache.get(kkey(s, "day"));
+  if (quoteHistoryShown?.symbol !== s || quoteHistoryShown.data !== hit?.d) {
+    quoteHistoryShown = { symbol: s, data: hit?.d };
+    const { returns, range, date } = quoteHistoryStats(hit?.d);
+    const position = range?.position;
+    const name = hit?.d.source ? `${hit.d.source}日K` : "日K";
+    const tiles = QUOTE_PERIODS.map(([label, title], i) => {
+      const pct = returns[i];
+      const tint = pct == null || pct === 0 ? 0 : Math.min(34, 8 + Math.abs(pct) * 1.25);
+      const rounded = pct == null ? "—" : `${pct > 0 ? "+" : pct < 0 ? "−" : ""}${Math.abs(pct).toFixed(1)}%`;
+      return `<div class="${cls(pct)}" style="--tint:${tint}%" title="${title} ${pctStr(pct)}"><dt>${label}</dt><dd>${rounded}</dd></div>`;
+    }).join("");
+    $("#detailHistory").innerHTML = `<div class="quote-range" title="按日K最高价、最低价和最新收盘价计算">
+      <div class="quote-range-label"><span>52 周区间</span><strong>${position == null ? "" : position.toFixed(0) + "%"}</strong></div>
+      <div class="quote-range-values"><span>${fmt(range?.low)}</span>
+        <div class="quote-range-track" aria-hidden="true"${position == null ? "" : ` style="--position:${position}%"`}>${position == null ? "" : "<i></i><b></b>"}</div>
+        <span>${fmt(range?.high)}</span></div></div>
+      <dl class="quote-performance" aria-label="各周期涨跌幅">${tiles}</dl>
+      ${date ? `<small class="quote-history-date" title="涨跌幅按日K收盘价计算">${quoteText(name)}截至 ${date}</small>` : ""}`;
+  }
+  if ((hit && now - hit.at < maxAge("day")) ||
+      (quoteHistoryRequested?.symbol === s && now - quoteHistoryRequested.at < 15000)) return;
+  quoteHistoryRequested = { symbol: s, at: now };
+  fetchKline(s, "day").then(() => {
+    if (state.selected === s) updateQuoteHistory(s);
+  }).catch(() => {});
+}
+
 function renderDetail() {
   const s = state.selected; const q = quotes[s] || {};
   $("#cName").textContent = q.name || displayCode(s);
@@ -1164,22 +1233,32 @@ function renderDetail() {
   $("#cPrice").textContent = fmt(q.price); $("#cPrice").className = "big";
   $("#cPct").textContent = q.change != null ? `${q.change > 0 ? "+" : ""}${fmt(q.change)}  ${pctStr(q.pct)}` : "";
   $("#cPct").className = "";
-  const rows = [["最新", fmt(q.price)], ["涨跌", fmt(q.change)], ["涨跌幅", pctStr(q.pct)], ["今开", fmt(q.open)],
-    ["最高", fmt(q.high)], ["最低", fmt(q.low)], ["昨收", fmt(q.prevClose)], ["成交量", fmt(q.volume, 0)],
-    ["币种", q.currency || (s.startsWith("hk") ? "HKD" : s.startsWith("yf:") ? "—" : "CNY")],
-    ["行情时间", q.time || "—"], ["数据源", q.source || "—"]];
-  if (q.ext) rows.splice(3, 0, [q.ext.label + "价", `<span class="${cls(q.ext.pct)}">${fmt(q.ext.price)} ${pctStr(q.ext.pct)}</span>`],
-    [q.ext.label + "时间", q.ext.time]);
-  if (s.startsWith("yf:")) rows.push(["美股时段", SESSION_NAME[usSession()]]);
+  const currency = q.currency || (s.startsWith("hk") ? "HKD" : s.startsWith("yf:") ? "" : "CNY");
+  const exchange = q.exchange || QUOTE_EXCHANGES[s.slice(0, 2)];
+  const meta = [displayCode(s), exchange, currency].filter(Boolean).join(" · ");
+  const rows = [["今开", fmt(q.open)], ["最高", fmt(q.high)], ["最低", fmt(q.low)], ["昨收", fmt(q.prevClose)],
+    ["成交量", fmt(q.volume, 0)]];
   if (q.fundType) {
-    const fr = [];
-    if (q.iopv) fr.push(["IOPV", `<span title="实时参考净值（交易所每 15 秒左右发布）">${fmt(q.iopv, 4)}</span>`]);
-    if (q.premium != null) fr.push([q.iopv ? "溢价率" : "溢价率(对昨净值)", `<span class="${cls(q.premium)}">${pctStr(q.premium)}</span>`]);
-    if (q.nav) fr.push(["单位净值(昨)", fmt(q.nav, 4)]);
-    rows.splice(8, 0, ...fr);
+    if (q.iopv) rows.push(["IOPV", fmt(q.iopv, 4), "", "实时参考净值（交易所每 15 秒左右发布）"]);
+    if (q.premium != null) rows.push([q.iopv ? "溢价率" : "溢价率(对昨净值)", pctStr(q.premium), cls(q.premium)]);
+    if (q.nav) rows.push(["单位净值(昨)", fmt(q.nav, 4)]);
   }
-  $("#detail").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("") +
-    (q.error ? `<dt>错误</dt><dd class="down">${q.error}</dd>` : "");
+  if (q.ext) rows.push([q.ext.label + "价", `${fmt(q.ext.price)} ${pctStr(q.ext.pct)}`, cls(q.ext.pct)],
+    [q.ext.label + "时间", displayDate(q.ext.time)]);
+  if (s.startsWith("yf:") && (q.ext || /^(NASDAQ|NYSE|AMEX|NYSEARCA|CBOE|BATS)/i.test(q.exchange || "")))
+    rows.push(["美股时段", SESSION_NAME[usSession()]]);
+  const fields = rows.map(([label, value, tone = "", title = ""]) =>
+    `<div><dt>${quoteText(label)}</dt><dd class="${tone}"${title ? ` title="${quoteText(title)}"` : ""}>${quoteText(value)}</dd></div>`).join("");
+  const change = q.change == null ? "" : `${q.change > 0 ? "+" : ""}${fmt(q.change)}`;
+  const quote = $("#detailQuote");
+  quote.innerHTML = `<h2 class="quote-name">${quoteText(q.name || displayCode(s))}</h2>
+    <div class="quote-headline"><strong class="quote-price">${fmt(q.price)}</strong>
+      ${change || q.pct != null ? `<span class="quote-change ${cls(q.pct ?? q.change)}"><span>${change}</span><span>${pctStr(q.pct)}</span></span>` : ""}</div>
+    <div class="quote-meta"><span>${quoteText(meta)}</span>${q.time ? `<time title="行情时间">${quoteText(q.time)}</time>` : ""}</div>
+    <dl class="quote-grid">${fields}</dl>
+    ${q.error ? `<p class="quote-error down">${quoteText(q.error)}</p>` : ""}`;
+  quote.title = q.source ? `行情来源：${q.source}` : "";
+  updateQuoteHistory(s);
 }
 
 /* ---------- 设置 ---------- */
@@ -1571,7 +1650,7 @@ function setMini(on) {
   if (on) { fillMiniGroups(); pinUI(); }
   if (desk()) desk().set_mini(on, state.pin !== false);
   else if (on) toast("浏览器里无法缩小窗口，请用桌面版");
-  if (!on) { applyLayout(); loadChart(true); renderTabs(); }
+  if (!on) { applyLayout(); loadChart(true); renderTabs(); renderDetail(); }
   renderWatch();
 }
 function pinUI() { $("#miniPin").classList.toggle("on", state.pin !== false); }

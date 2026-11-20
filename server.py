@@ -21,8 +21,8 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 版本戳：每次发版改这里。顶栏会显示，桌面启动器也用它判断后台跑的是不是旧版本
-VERSION = "0.8.2"
-BUILD = "2026-11-19 11:47"
+VERSION = "0.8.3"
+BUILD = "2026-11-20 14:01"
 
 PORT = int(os.environ.get("BOARD_PORT", "8765"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -160,6 +160,7 @@ def yahoo_quote(sym):
         "timestamp": t,
         "sparkDay": yahoo_session_day(t, meta) if t else None,
         "currency": meta.get("currency"),
+        "exchange": meta.get("fullExchangeName"),
         "type": meta.get("instrumentType"),
         "source": "雅虎",
     }

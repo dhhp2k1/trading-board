@@ -5,7 +5,7 @@
 <title>交易看板</title>
 <link rel="icon" href="img/logo.svg" type="image/svg+xml">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=0.8.3">
 <link rel="stylesheet" href="news.css">
 <link rel="stylesheet" href="ecocal.css">
 </head>
@@ -99,8 +99,11 @@
   </section>
 
   <aside id="right" class="panel">
-    <div class="ph"><span class="pn">3</span> 报价详情</div>
-    <dl id="detail"></dl>
+    <div class="ph" id="quoteTitle">报价详情</div>
+    <section id="detail" aria-labelledby="quoteTitle">
+      <div id="detailQuote"></div>
+      <div id="detailHistory"></div>
+    </section>
     <!-- 资讯面板：由"资讯"子任务在 news.js / news.css 中实现，这里只留容器 -->
     <section id="news"></section>
     <div class="ph"><span class="pn">4</span> 我的 Agent</div>
@@ -197,7 +200,7 @@
 
 <script src="lightweight-charts.standalone.production.js"></script>
 <script src="chart-drawings.js?v=0.8.2"></script>
-<script src="app.js?v=0.8.2"></script>
+<script src="app.js?v=0.8.3"></script>
 <script src="news.js" onerror="void 0"></script>
 <script src="ecocal.js" onerror="void 0"></script>
 </body>
