@@ -21,8 +21,8 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 版本戳：每次发版改这里。顶栏会显示，桌面启动器也用它判断后台跑的是不是旧版本
-VERSION = "0.8.3"
-BUILD = "2026-11-20 14:01"
+VERSION = "0.8.4"
+BUILD = "2026-11-20 14:28"
 
 PORT = int(os.environ.get("BOARD_PORT", "8765"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -128,14 +128,16 @@ def yahoo_chart(sym, rng, interval, prepost=False, period1=None, period2=None):
     win = f"period1={int(period1)}&period2={int(period2)}" if period1 else f"range={rng}"
     path = (f"/v8/finance/chart/{urllib.parse.quote(sym)}"
             f"?{win}&interval={interval}&includePrePost={'true' if prepost else 'false'}")
-    try:
-        data = json.loads(http_get("https://query1.finance.yahoo.com" + path, timeout=6))
-    except Exception:  # noqa: BLE001  query1 偶尔限流，换 query2
-        data = json.loads(http_get("https://query2.finance.yahoo.com" + path, timeout=6))
-    res = (data.get("chart") or {}).get("result") or []
-    if not res:
-        raise ValueError(f"雅虎无数据: {sym}")
-    return res[0]
+    for host in ("query1.finance.yahoo.com", "query2.finance.yahoo.com"):
+        try:
+            data = json.loads(http_get("https://" + host + path, timeout=6))
+            results = (data.get("chart") or {}).get("result") or []
+            if results and isinstance(results[0], dict) and results[0].get("meta"):
+                return results[0]
+            raise ValueError(f"雅虎无数据: {sym}")
+        except Exception as exc:  # noqa: BLE001  空响应和请求失败都尝试备用入口
+            last_error = exc
+    raise last_error
 
 
 def yahoo_quote(sym):
@@ -145,12 +147,20 @@ def yahoo_quote(sym):
     prev = meta.get("previousClose") or meta.get("chartPreviousClose")
     chg = price - prev if price is not None and prev else None
     t = meta.get("regularMarketTime")
+    ts = r.get("timestamp") or []
+    series = ((r.get("indicators") or {}).get("quote") or [{}])[0] or {}
+    opened = meta.get("regularMarketOpen")
+    regular = (meta.get("currentTradingPeriod") or {}).get("regular") or {}
+    start, end = regular.get("start", 0), regular.get("end", 0)
+    if opened is None and t and start <= t <= end:
+        opened = next((o for minute, o in zip(ts, series.get("open") or [])
+                       if start <= minute < end and o is not None), None)
     q = {
         "symbol": "yf:" + sym,
         "name": meta.get("shortName") or meta.get("longName") or sym,
         "price": price,
         "prevClose": prev,
-        "open": None,
+        "open": opened,
         "high": meta.get("regularMarketDayHigh"),
         "low": meta.get("regularMarketDayLow"),
         "change": chg,
@@ -160,14 +170,13 @@ def yahoo_quote(sym):
         "timestamp": t,
         "sparkDay": yahoo_session_day(t, meta) if t else None,
         "currency": meta.get("currency"),
-        "exchange": meta.get("fullExchangeName"),
+        "exchange": meta.get("fullExchangeName") or meta.get("exchangeName"),
         "type": meta.get("instrumentType"),
         "source": "雅虎",
     }
     # 美股盘前 / 盘后：取常规交易时段之后的最后一笔成交
     if meta.get("hasPrePostMarketData") and price:
-        ts = r.get("timestamp") or []
-        closes = ((r.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []
+        closes = series.get("close") or []
         last = next(((ts[i], closes[i]) for i in range(min(len(ts), len(closes)) - 1, -1, -1)
                      if closes[i] is not None), None)
         if last and t and last[0] > t + 60:

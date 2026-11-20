@@ -1170,17 +1170,28 @@ function quoteMonthAgo(date, months) {
   return Date.UTC(y, m, day);
 }
 
-function quoteHistoryStats(data) {
+function quoteDailyBars(data) {
   const bars = Array.isArray(data?.bars) ? data.bars : [];
-  const daily = bars.filter((bar) => /^\d{4}-\d{2}-\d{2}$/.test(bar?.time) &&
-    Number.isFinite(Date.parse(bar.time)) && Number.isFinite(bar.close));
+  return bars.flatMap((bar) => {
+    if (!Number.isFinite(bar?.close)) return [];
+    const time = typeof bar.time === "string" ? bar.time.slice(0, 10) : "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(time) && Number.isFinite(Date.parse(time))) return [{ ...bar, time }];
+    if (!Number.isFinite(bar.time)) return [];
+    const date = new Date(bar.time * 1000);
+    return Number.isFinite(date.getTime()) ? [{ ...bar, time: date.toISOString().slice(0, 10) }] : [];
+  });
+}
+
+function quoteHistoryStats(data) {
+  const daily = quoteDailyBars(data);
   const last = daily.at(-1);
   if (!last) return { returns: [] };
   const day = new Date(last.time + "T00:00:00Z");
   const cutoff = (ms) => new Date(ms).toISOString().slice(0, 10);
   const dates = [day.getTime() - 7 * QUOTE_DAY, ...[1, 3, 6].map((m) => quoteMonthAgo(day, m)),
     Date.UTC(day.getUTCFullYear() - 1, 11, 31), quoteMonthAgo(day, 12)];
-  const bases = [daily.at(-2), ...dates.map((ms) => daily.findLast((bar) => bar.time <= cutoff(ms)))];
+  const newestFirst = daily.slice().reverse();
+  const bases = [daily.at(-2), ...dates.map(cutoff).map((date) => newestFirst.find((bar) => bar.time <= date))];
   const returns = bases.map((base) => base?.close > 0 ? (last.close / base.close - 1) * 100 : null);
   const from = cutoff(day.getTime() - 364 * QUOTE_DAY);
   let range;
@@ -1193,6 +1204,20 @@ function quoteHistoryStats(data) {
     }
   }
   return { returns, range, date: last.time };
+}
+
+function needsHistoricalQuote(symbol, quote) {
+  return (symbol.startsWith("yf:") || symbol.startsWith("hk")) && !Number.isFinite(quote?.price);
+}
+
+function historicalQuote(data) {
+  const bars = quoteDailyBars(data);
+  const last = bars.at(-1);
+  if (!last) return null;
+  const prevClose = bars.at(-2)?.close;
+  const change = prevClose == null ? null : last.close - prevClose;
+  return { price: last.close, open: last.open, high: last.high, low: last.low, volume: last.volume,
+    time: last.time, source: data.source, prevClose, change, pct: prevClose > 0 ? change / prevClose * 100 : null };
 }
 
 function updateQuoteHistory(s) {
@@ -1221,21 +1246,25 @@ function updateQuoteHistory(s) {
       (quoteHistoryRequested?.symbol === s && now - quoteHistoryRequested.at < 15000)) return;
   quoteHistoryRequested = { symbol: s, at: now };
   fetchKline(s, "day").then(() => {
-    if (state.selected === s) updateQuoteHistory(s);
+    if (state.selected !== s || MINI) return;
+    if (needsHistoricalQuote(s, quotes[s])) renderDetail();
+    else updateQuoteHistory(s);
   }).catch(() => {});
 }
 
 function renderDetail() {
-  const s = state.selected; const q = quotes[s] || {};
-  $("#cName").textContent = q.name || displayCode(s);
+  const s = state.selected; const live = quotes[s] || {};
+  $("#cName").textContent = live.name || displayCode(s);
   $("#cAdd").classList.toggle("show", !!s && !(state.groups[state.group] || []).includes(s));
   $("#cCode").textContent = displayCode(s);
-  $("#cPrice").textContent = fmt(q.price); $("#cPrice").className = "big";
-  $("#cPct").textContent = q.change != null ? `${q.change > 0 ? "+" : ""}${fmt(q.change)}  ${pctStr(q.pct)}` : "";
+  $("#cPrice").textContent = fmt(live.price); $("#cPrice").className = "big";
+  $("#cPct").textContent = live.change != null ? `${live.change > 0 ? "+" : ""}${fmt(live.change)}  ${pctStr(live.pct)}` : "";
   $("#cPct").className = "";
+  const daily = needsHistoricalQuote(s, live) ? historicalQuote(klineCache.get(kkey(s, "day"))?.d) : null;
+  const q = daily ? { ...live, ...daily, ext: null } : live;
   const currency = q.currency || (s.startsWith("hk") ? "HKD" : s.startsWith("yf:") ? "" : "CNY");
   const exchange = q.exchange || QUOTE_EXCHANGES[s.slice(0, 2)];
-  const meta = [displayCode(s), exchange, currency].filter(Boolean).join(" · ");
+  const meta = [displayCode(s), exchange, currency, daily && "日K报价"].filter(Boolean).join(" · ");
   const rows = [["今开", fmt(q.open)], ["最高", fmt(q.high)], ["最低", fmt(q.low)], ["昨收", fmt(q.prevClose)],
     ["成交量", fmt(q.volume, 0)]];
   if (q.fundType) {
@@ -1254,10 +1283,10 @@ function renderDetail() {
   quote.innerHTML = `<h2 class="quote-name">${quoteText(q.name || displayCode(s))}</h2>
     <div class="quote-headline"><strong class="quote-price">${fmt(q.price)}</strong>
       ${change || q.pct != null ? `<span class="quote-change ${cls(q.pct ?? q.change)}"><span>${change}</span><span>${pctStr(q.pct)}</span></span>` : ""}</div>
-    <div class="quote-meta"><span>${quoteText(meta)}</span>${q.time ? `<time title="行情时间">${quoteText(q.time)}</time>` : ""}</div>
+    <div class="quote-meta"><span>${quoteText(meta)}</span>${q.time ? `<time title="${daily ? "日K日期" : "行情时间"}">${quoteText(q.time)}</time>` : ""}</div>
     <dl class="quote-grid">${fields}</dl>
-    ${q.error ? `<p class="quote-error down">${quoteText(q.error)}</p>` : ""}`;
-  quote.title = q.source ? `行情来源：${q.source}` : "";
+    ${q.error && !daily ? `<p class="quote-error down">${quoteText(q.error)}</p>` : ""}`;
+  quote.title = daily ? (q.source ? `日K来源：${q.source}` : "") : (q.source ? `行情来源：${q.source}` : "");
   updateQuoteHistory(s);
 }
 
