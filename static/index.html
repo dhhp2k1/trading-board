@@ -5,7 +5,7 @@
 <title>交易看板</title>
 <link rel="icon" href="img/logo.svg" type="image/svg+xml">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="style.css?v=0.8.3">
+<link rel="stylesheet" href="style.css?v=0.8.6">
 <link rel="stylesheet" href="news.css">
 <link rel="stylesheet" href="ecocal.css">
 </head>
@@ -27,7 +27,7 @@
 
 <main>
   <aside id="left" class="panel">
-    <div class="ph"><span class="pn">1</span> 自选监控 <span class="muted" id="watchCount"></span></div>
+    <div class="watch-heading" id="watchHeading">自选监控 <span id="watchCount"></span></div>
     <div id="miniBar" class="pywebview-drag-region">
       <img src="img/logo.svg" alt="" class="pywebview-drag-region">
       <select id="miniGroup"></select>
@@ -39,15 +39,16 @@
     </div>
     <div class="tabs" id="groupTabs"></div>
     <div id="heat"></div>
-    <table id="watch">
-      <thead><tr>
-        <th data-sort="name">证券</th>
-        <th class="spk">走势</th>
-        <th data-sort="price" class="r num">最新</th>
-        <th data-sort="pct" class="r pct">涨跌幅</th>
-      </tr></thead>
-      <tbody></tbody>
-    </table>
+    <div id="watchScroll">
+      <table id="watch" role="table" aria-labelledby="watchHeading">
+        <thead role="rowgroup"><tr role="row">
+          <th role="columnheader" scope="col"><button data-sort="name">证券</button></th>
+          <th role="columnheader" scope="col"><button data-sort="price">最新</button></th>
+          <th role="columnheader" scope="col"><button data-sort="pct">涨跌幅</button></th>
+        </tr></thead>
+        <tbody role="rowgroup"></tbody>
+      </table>
+    </div>
     <div class="leftfoot">
       <button id="btnImport">导入</button>
       <button id="btnExport">导出</button>
@@ -200,7 +201,7 @@
 
 <script src="lightweight-charts.standalone.production.js"></script>
 <script src="chart-drawings.js?v=0.8.2"></script>
-<script src="app.js?v=0.8.4"></script>
+<script src="app.js?v=0.8.6"></script>
 <script src="news.js" onerror="void 0"></script>
 <script src="ecocal.js" onerror="void 0"></script>
 </body>

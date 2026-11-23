@@ -91,6 +91,7 @@ function fmt(v, d = 2) {
 }
 const pctStr = (p) => (p == null ? "—" : (p > 0 ? "+" : "") + p.toFixed(2) + "%");
 const cls = (p) => (p > 0 ? "up" : p < 0 ? "down" : "");
+const displayDate = (s) => String(s ?? "").replace(/^(\d{4})[-/](\d{2})[-/](\d{2})(?=$|[ T])/, "$1$2$3");
 
 /* ---------- 行情刷新 ---------- */
 function ovList() { return ((state.ovMap || {})[state.selected]) || []; }
@@ -158,9 +159,11 @@ $("#ticker").addEventListener("click", (e) => {
 
 /* ---------- 自选列表 ---------- */
 function renderTabs() {
-  $("#groupTabs").innerHTML = Object.keys(state.groups).map((g) =>
-    `<button data-g="${g}" class="${g === state.group ? "on" : ""}">${g} <small class="muted">${state.groups[g].length}</small></button>`
-  ).join("");
+  $("#groupTabs").innerHTML = Object.keys(state.groups).map((g) => {
+    const label = watchText(g);
+    const active = g === state.group;
+    return `<button data-g="${label}" title="${label}" aria-pressed="${active}" class="${active ? "on" : ""}">${label} <small class="muted">${state.groups[g].length}</small></button>`;
+  }).join("");
 }
 $("#groupTabs").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
@@ -182,12 +185,16 @@ $("#groupTabs").addEventListener("dblclick", (e) => {
 
 function extTag(q) {
   if (!q.ext || usSession() === "regular") return "";
-  return ` <span class="ext ${cls(q.ext.pct)}" title="${q.ext.label} ${fmt(q.ext.price)}（${q.ext.time}）">${q.ext.label}${pctStr(q.ext.pct)}</span>`;
+  const label = watchText(q.ext.label);
+  return `<span class="ext ${cls(q.ext.pct)}" title="${label} ${fmt(q.ext.price)}（${watchText(displayDate(q.ext.time))}）">${label}${pctStr(q.ext.pct)}</span>`;
 }
 
 function premTag(q) {
   if (q.premium == null) return "";
-  return ` <span class="ext prem ${cls(q.premium)}" title="${q.iopv ? "IOPV " + fmt(q.iopv, 4) + "，" : ""}溢价率 ${pctStr(q.premium)}">溢${pctStr(q.premium)}</span>`;
+  return `<span class="ext prem ${cls(q.premium)}" title="${q.iopv ? "IOPV " + fmt(q.iopv, 4) + "，" : ""}溢价率 ${pctStr(q.premium)}">溢${pctStr(q.premium)}</span>`;
+}
+function watchText(value) {
+  return String(value).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 }
 function renderWatch(prev = {}) {
   let list = [...(state.groups[state.group] || [])];
@@ -200,24 +207,49 @@ function renderWatch(prev = {}) {
       return (va > vb ? 1 : va < vb ? -1 : 0) * dir;
     });
   }
-  $("#watch tbody").innerHTML = list.map((s) => {
+  document.querySelectorAll("#watch [data-sort]").forEach((button) => {
+    const header = button.closest("th");
+    if (button.dataset.sort === state.sort?.key) {
+      header.setAttribute("aria-sort", state.sort.dir > 0 ? "ascending" : "descending");
+    } else {
+      header.removeAttribute("aria-sort");
+    }
+  });
+  const L = look();
+  $("#watch tbody").innerHTML = list.length ? list.map((s) => {
     const q = quotes[s] || {};
     const p = prev[s];
     const flash = p && q.price != null && p.price != null && q.price !== p.price
       ? (q.price > p.price ? "flash-up" : "flash-down") : "";
-    const L = look();
-    return `<tr data-s="${s}" class="${s === state.selected ? "sel" : ""} ${flash}">
-      <td class="nmc" title="${q.name || ""} ${displayCode(s)}">
-        <div class="l1">${q.name || (q.error ? "⚠ " : "") + displayCode(s)}</div>
-        <div class="l2"><span class="code">${displayCode(s)}</span>${extTag(q)}${L.prem ? premTag(q) : ""}</div>
-        ${L.range ? rangeBar(q) : ""}</td>
-      <td class="spk">${L.spark ? sparkSvg(s, q) : ""}</td>
-      <td class="r num"><div class="l1 ${cls(q.pct)}">${fmt(q.price)}</div>
-        <div class="l2 chg ${cls(q.pct)}">${q.change == null ? "" : (q.change > 0 ? "+" : "") + fmt(q.change)}</div></td>
-      <td class="r pct ${L.pill ? "" : cls(q.pct)}"><span class="del" data-del="${s}" title="移出自选">✕</span>${L.pill ? pill(q.pct) : pctStr(q.pct)}</td></tr>`;
-  }).join("");
+    const symbol = watchText(s), code = watchText(displayCode(s));
+    const name = q.name ? watchText(q.name) : (q.error ? "⚠ " : "") + code;
+    const price = fmt(q.price);
+    const move = q.change == null ? "" : (q.change > 0 ? "+" : "") + fmt(q.change);
+    const extended = extTag(q);
+    const premium = L.prem ? premTag(q) : "";
+    return `<tr role="row" data-s="${symbol}" class="${s === state.selected ? "sel" : ""} ${flash}">
+      <td role="cell" class="watch-symbol">
+        <div class="watch-name-line">
+          <span class="watch-name" title="${name}">${name}</span>
+          <button type="button" class="watch-remove" data-del="${symbol}" title="移出当前分组" aria-label="移出 ${code}">×</button>
+        </div>
+        <div class="watch-meta">
+          <div class="watch-code" title="${code}"><span>${code}</span>${L.range ? rangeBar(q) : ""}</div>
+          ${L.spark ? `<div class="watch-spark" title="日内走势" aria-hidden="true">${sparkSvg(s, q)}</div>` : ""}
+          ${extended && premium ? premium : ""}
+        </div>
+      </td>
+      <td role="cell" class="watch-quote">
+        <div class="watch-price${price.length > 9 ? " long" : ""}" title="${price}">${price}</div>
+        ${L.change && move ? `<div class="watch-change ${cls(q.pct)}" title="${move}">${move}</div>` : ""}
+      </td>
+      <td role="cell" class="watch-performance">
+        ${L.pill ? pill(q.pct) : `<span class="watch-pct ${cls(q.pct)}" title="${pctStr(q.pct)}">${pctStr(q.pct)}</span>`}
+        ${extended || premium}
+      </td></tr>`;
+  }).join("") : '<tr role="row" class="watch-empty"><td role="cell" colspan="3">此分组暂无标的</td></tr>';
   $("#watchCount").textContent = `${list.length} 只`;
-  if (look().view === "heat") renderHeat(list);
+  if (L.view === "heat") renderHeat(list);
   needSparks(list);
 }
 
@@ -235,10 +267,11 @@ function upDownRGB(pct) {
   return pct >= 0 ? up : dn;
 }
 function pill(pct) {
-  if (pct == null) return '<span class="pill">—</span>';
-  const a = Math.min(1, 0.22 + Math.abs(pct) / 6), c = upDownRGB(pct);
-  const bg = Math.abs(pct) < 0.005 ? "rgba(128,128,128,.25)" : `rgba(${c.join(",")},${a.toFixed(2)})`;
-  return `<span class="pill" style="background:${bg}">${pctStr(pct)}</span>`;
+  const a = pct == null || Math.abs(pct) < 0.005 ? 0 : Math.min(.24, .08 + Math.abs(pct) / 75);
+  const c = upDownRGB(pct);
+  const bg = a ? `rgba(${c.join(",")},${a.toFixed(2)})` : "var(--input)";
+  const value = pctStr(pct);
+  return `<span class="watch-pct pill ${cls(pct)}" style="background:${bg}" title="${value}">${value}</span>`;
 }
 function rangeBar(q) {
   if (q.high == null || q.low == null || q.price == null || q.high <= q.low) return "";
@@ -367,12 +400,12 @@ $("#lookPop").addEventListener("click", (e) => {
 $("#lookPop").addEventListener("change", (e) => { const o = e.target.dataset.o; if (o) setLook({ [o]: e.target.checked }); });
 document.addEventListener("click", (e) => { if (!e.target.closest("#lookPop")) $("#lookPop").style.display = "none"; });
 $("#watch tbody").addEventListener("click", (e) => {
-  const del = e.target.dataset.del;
+  const del = e.target.closest("[data-del]")?.dataset.del;
   if (del) {
     state.groups[state.group] = state.groups[state.group].filter((s) => s !== del);
     save(); renderTabs(); renderWatch(); return;
   }
-  const tr = e.target.closest("tr"); if (tr) select(tr.dataset.s);
+  const tr = e.target.closest("tr[data-s]"); if (tr) select(tr.dataset.s);
 });
 $("#watch thead").addEventListener("click", (e) => {
   const k = e.target.dataset.sort; if (!k) return;
@@ -1490,7 +1523,7 @@ function symbolItems(s) {
 
 /* 自选列表 */
 $("#watch tbody").addEventListener("contextmenu", (e) => {
-  const tr = e.target.closest("tr"); if (!tr) return;
+  const tr = e.target.closest("tr[data-s]"); if (!tr) return;
   e.preventDefault(); e.stopPropagation();
   const s = tr.dataset.s, g = state.group, list = state.groups[g], i = list.indexOf(s);
   const move = (to) => { list.splice(i, 1); list.splice(to, 0, s); state.sort = null; save(); renderWatch(); };
@@ -1508,7 +1541,7 @@ $("#watch tbody").addEventListener("contextmenu", (e) => {
 
 /* 自选列表空白处 / 表头 */
 $("#left").addEventListener("contextmenu", (e) => {
-  if (e.target.closest("tbody tr") || e.target.closest("input")) return;
+  if (e.target.closest("tbody tr[data-s], input")) return;
   e.preventDefault(); e.stopPropagation();
   const sortBy = (key, dir) => { state.sort = key ? { key, dir } : null; save(); renderWatch(); };
   showMenu(e.clientX, e.clientY, [
@@ -1627,11 +1660,10 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Home" && !e.target.closest("input, textarea")) chart.timeScale().scrollToRealTime();
 });
 
-/* ---------- 自选栏宽度：拖动左栏右边缘调整整栏宽度，拖动“证券”表头右边缘调整名称列宽度；双击恢复默认 ---------- */
+/* ---------- 自选栏宽度：拖动左栏右边缘调整整栏宽度，双击恢复默认 ---------- */
 function applyLayout() {
   const m = document.querySelector("main");
   if (state.leftW) m.style.setProperty("--leftW", state.leftW + "px"); else m.style.removeProperty("--leftW");
-  $("#watch").style.setProperty("--nameCol", (state.nameCol || 40) + "%");
 }
 function dragger(el, onMove, onReset) {
   el.addEventListener("mousedown", (e) => {
@@ -1653,13 +1685,6 @@ function dragger(el, onMove, onReset) {
     const x = ev.clientX - left.getBoundingClientRect().left;
     state.leftW = Math.round(Math.min(window.innerWidth * 0.42, Math.max(220, x))); applyLayout();
   }, () => { state.leftW = null; });
-  const th = $("#watch thead th");
-  const cs = document.createElement("span"); cs.className = "colsplit"; cs.title = "拖动调整名称列宽度，双击恢复默认";
-  th.appendChild(cs);
-  dragger(cs, (ev) => {
-    const r = $("#watch").getBoundingClientRect();
-    state.nameCol = Math.round(Math.max(25, Math.min(75, (ev.clientX - r.left) / r.width * 100))); applyLayout();
-  }, () => { state.nameCol = null; });
   applyLayout();
 })();
 
