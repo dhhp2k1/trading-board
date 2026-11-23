@@ -12,7 +12,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP_DIRS = {".git", "__pycache__", ".github", "dist", "build"}
-SKIP_FILES = {"version.json"}
+SKIP_FILES = {"version.json", ".git"}
 
 
 def main():
@@ -34,12 +34,13 @@ def main():
         old = json.load(open(vp, encoding="utf-8"))
     manifest = {
         "version": version,
+        "channel": re.search(r'^CHANNEL = "([^"]+)"', src, re.M).group(1),
         "build": build,
         "notes": sys.argv[1] if len(sys.argv) > 1 else "",
         "requirements_changed": old.get("files", {}).get("requirements.txt") not in (None, files.get("requirements.txt")),
         "files": dict(sorted(files.items())),
     }
-    json.dump(manifest, open(vp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    json.dump(manifest, open(vp, "w", encoding="utf-8", newline="\n"), ensure_ascii=False, indent=1)
     print(f"version.json: v{version}, {len(files)} files")
 
 

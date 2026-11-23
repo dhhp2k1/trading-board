@@ -200,6 +200,12 @@
   </div>
 </dialog>
 
+<dialog id="updateDialog">
+  <form method="dialog"><strong>检查更新</strong><button aria-label="关闭">×</button></form>
+  <p><label><input type="checkbox" id="useNext"> 接收 next 测试版</label></p>
+  <p id="updateResult" role="status"></p>
+  <button id="installChecked" type="button" disabled>安装并重启</button>
+</dialog>
 <script src="lightweight-charts.standalone.production.js"></script>
 <script src="chart-drawings.js?v=0.8.2"></script>
 <script src="app.js?v=0.8.7"></script>

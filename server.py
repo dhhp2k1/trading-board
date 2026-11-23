@@ -21,8 +21,9 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 版本戳：每次发版改这里。顶栏会显示，桌面启动器也用它判断后台跑的是不是旧版本
-VERSION = "0.8.8"
-BUILD = "2026-11-23 15:11"
+VERSION = "0.8.9"
+CHANNEL = "main"
+BUILD = "2026-11-23 15:40"
 
 PORT = int(os.environ.get("BOARD_PORT", "8765"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -669,7 +670,9 @@ class Handler(SimpleHTTPRequestHandler):
             if updater is None:
                 return self.send_json({"error": "updater 不可用"}, 501)
             try:
-                ok = updater.start_update(restart_command())
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                channel = query.get("channel", [CHANNEL])[0]
+                ok = updater.start_update(restart_command(), VERSION, CHANNEL, channel, query.get("version", [None])[0])
             except Exception as e:  # noqa: BLE001
                 return self.send_json({"error": f"检查更新失败：{e}"}, 502)
             return self.send_json({"ok": ok, **updater.status()})
@@ -679,12 +682,12 @@ class Handler(SimpleHTTPRequestHandler):
         u = urllib.parse.urlparse(self.path)
         qs = urllib.parse.parse_qs(u.query)
         if u.path == "/api/version":
-            return self.send_json({"version": VERSION, "build": BUILD, "pid": os.getpid()})
+            return self.send_json({"version": VERSION, "build": BUILD, "channel": CHANNEL, "pid": os.getpid()})
         if u.path == "/api/update/check":
             if updater is None:
                 return self.send_json({"error": "updater 不可用"}, 501)
             try:
-                return self.send_json(updater.check(VERSION, force=qs.get("force", ["0"])[0] == "1"))
+                return self.send_json(updater.check(VERSION, CHANNEL, qs.get("channel", [CHANNEL])[0], force=qs.get("force", ["0"])[0] == "1"))
             except Exception as e:  # noqa: BLE001
                 return self.send_json({"error": f"检查更新失败：{e}"}, 502)
         if u.path == "/api/update/status":

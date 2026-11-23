@@ -1404,30 +1404,60 @@ addEventListener("keydown", (e) => {
 applyZoom(false);
 
 /* ---------- 版本戳 + 程序内更新 ---------- */
-let curVersion = null, updInfo = null;
+let curVersion = null, updInfo = null, installedChannel = "main", updateRequest = 0;
+const updateChannel = () => state.updateChannel || installedChannel;
+const updateDialog = $("#updateDialog");
+function openUpdates() {
+  $("#useNext").checked = updateChannel() === "next";
+  if (!updateDialog.open) updateDialog.showModal();
+  checkUpdate(true);
+}
+$("#useNext").onchange = (event) => {
+  state.updateChannel = event.target.checked ? "next" : "main";
+  save();
+  checkUpdate(true);
+};
+$("#installChecked").onclick = () => doUpdate();
+$("#ver").onclick = openUpdates;
 fetch("/api/version").then((r) => r.json()).then((v) => {
   curVersion = v.version;
-  $("#ver").textContent = `v${v.version} · ${v.build}`;
+  installedChannel = v.channel || "main";
+  $("#ver").textContent = `v${v.version} · ${installedChannel} · ${v.build}`;
   $("#ver").title = `服务端版本 ${v.version}，构建于 ${v.build}（进程 ${v.pid}）`;
   setTimeout(() => checkUpdate(false), 3000);
 }).catch(() => { $("#ver").textContent = "版本未知（旧服务端）"; $("#ver").classList.add("down"); });
 
 async function checkUpdate(manual) {
+  const request = ++updateRequest;
+  const channel = updateChannel();
+  if (manual) {
+    updInfo = null;
+    $("#installChecked").disabled = true;
+    $("#updBtn").style.display = "none";
+    $("#updateResult").textContent = "正在检查 " + channel + "…";
+  }
   try {
-    const r = await (await fetch("/api/update/check" + (manual ? "?force=1" : ""))).json();
+    const r = await (await fetch("/api/update/check?channel=" + channel + "&force=" + (manual ? 1 : 0))).json();
+    if (request !== updateRequest) return;
     if (r.error) throw new Error(r.error);
     $("#ver").classList.remove("updfail");
     const srcs = (r.sources || []).map((x) => `${x.src}：${x.version ? "v" + x.version : "失败 " + (x.error || "")}`).join("\n");
     $("#ver").title = `最新版本 v${r.latest}（${new Date().toLocaleTimeString("zh-CN", { hour12: false })} 检查）\n${srcs}\n右键 → 检查更新 可立即重查`;
     updInfo = r;
+    $("#updateResult").textContent = r.available
+      ? `当前 ${installedChannel} v${r.current} → ${channel} v${r.latest}。${r.notes || ""}`
+      : `已是 ${channel} 最新版 v${r.current}`;
+    $("#installChecked").disabled = !r.available;
     const btn = $("#updBtn");
     if (r.available) {
-      btn.textContent = `↑ 新版本 v${r.latest}`; btn.title = (r.notes || "") + "\n点击更新"; btn.style.display = "";
+      btn.textContent = `安装 ${channel} v${r.latest}`; btn.title = (r.notes || "") + "\n点击更新"; btn.style.display = "";
     } else {
       btn.style.display = "none";
       if (manual) toast(`已是最新版本 v${r.current}（悬停版本号可看各更新源结果）`);
     }
   } catch (e) {
+    if (request !== updateRequest) return;
+    $("#updateResult").textContent = "检查失败：" + e.message;
     if (manual) toast("检查更新失败：" + e.message);
     const v = $("#ver"); v.title = "检查更新失败：" + e.message + "\n右键 → 检查更新 可重试"; v.classList.add("updfail");
   }
@@ -1438,19 +1468,26 @@ async function doUpdate() {
   if (!updInfo || !updInfo.available) return checkUpdate(true);
   if (updInfo.frozen) return toast("打包版（exe）请下载新版安装包");
   const notes = updInfo.notes ? `\n\n更新内容：\n${updInfo.notes}` : "";
-  if (!confirm(`更新到 v${updInfo.latest}？程序会自动重启，自选和设置不受影响。${notes}`)) return;
+  if (!confirm(`安装 ${updInfo.channel} v${updInfo.latest}？程序会自动重启，自选和设置不受影响。${notes}`)) return;
   const btn = $("#updBtn");
   btn.disabled = true;
+  $("#installChecked").disabled = true;
+  $("#useNext").disabled = true;
+  updateDialog.close();
   try {
-    const r = await (await fetch("/api/update/apply", { method: "POST" })).json();
-    if (r.error) throw new Error(r.error);
-  } catch (e) { btn.disabled = false; return toast("更新失败：" + e.message); }
+    const r = await (await fetch(`/api/update/apply?channel=${updInfo.channel}&version=${encodeURIComponent(updInfo.latest)}`, { method: "POST" })).json();
+    if (!r.ok) throw new Error(r.error || r.message || "更新正在进行");
+  } catch (e) { $("#useNext").disabled = false; $("#installChecked").disabled = false; btn.disabled = false; return toast("更新失败：" + e.message); }
   const old = curVersion;
   const poll = setInterval(async () => {
     try {
       const st = await (await fetch("/api/update/status")).json();
       btn.textContent = `${st.message || "更新中"} ${st.progress || 0}%`;
-      if (st.status === "error") { clearInterval(poll); btn.disabled = false; toast(st.message); }
+      if (st.status === "idle") {
+        const v = await (await fetch("/api/version")).json();
+        if (v.version !== old || v.channel !== installedChannel) { clearInterval(poll); location.reload(); }
+      }
+      if (st.status === "error") { clearInterval(poll); btn.disabled = false; $("#useNext").disabled = false; $("#installChecked").disabled = false; toast(st.message); }
     } catch {
       // 旧服务端已退出：等新版本起来（桌面版会自动换成新窗口；浏览器版在这里刷新页面）
       try { const v = await (await fetch("/api/version")).json(); if (v.version !== old) { clearInterval(poll); location.reload(); } } catch { /* 还在重启 */ }
@@ -1684,7 +1721,7 @@ document.addEventListener("contextmenu", (e) => {
       { label: "缩小", key: "Ctrl −", action: () => setZoom((state.zoom || 1) / 1.1) },
       { label: "自动（跟随窗口）", key: "Ctrl 0", checked: (state.zoom || 1) === 1, action: () => setZoom(1) },
     ] },
-    { label: "检查更新", action: () => checkUpdate(true) },
+    { label: "检查更新", action: openUpdates },
     { label: "重新加载界面", key: "Ctrl+R", action: () => location.reload() },
   ]);
 });
