@@ -45,6 +45,7 @@
   function renderComparison(day) {
     if (!day) {
       comparison = null;
+      overnight.className = "";
       overnight.textContent = "有当日 A 股有效行情后显示";
       return;
     }
@@ -94,7 +95,7 @@
     renderComparison(count ? stats.day : null);
   }
 
-  coverage.title = "仅统计沪深京同日、近 5 个连续交易时段分钟内且有成交的报价。午休和收盘后按该时段结束时间计算。";
+  coverage.title = "仅统计沪深京当日有成交、且距盘中当前时间不超过 5 分钟的报价。午休和收盘后以该时段结束时间为准。";
   overnight.title = "取 A 股该交易日开盘前已结束的最近一场美股常规交易，与上一场常规交易收盘比较。数据来自雅虎。";
   document.addEventListener("board:watch-quotes", (event) => {
     snapshot = event.detail;
