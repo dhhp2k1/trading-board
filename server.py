@@ -16,6 +16,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+from datetime import date, timedelta
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -141,6 +142,32 @@ def yahoo_chart(sym, rng, interval, prepost=False, period1=None, period2=None):
         except Exception as exc:  # noqa: BLE001  空响应和请求失败都尝试备用入口
             last_error = exc
     raise last_error
+
+
+US_GROUP_REFERENCES = frozenset(("^GSPC", "^IXIC", "^DJI", "QQQ", "NVDA"))
+
+
+def us_group_reference(symbol, china_day):
+    # 中国 09:30 是 UTC 01:30。同一 UTC 日期内的美国常规交易尚未开始。
+    earliest = (date.fromisoformat(china_day) - timedelta(days=7)).isoformat()
+    result = yahoo_chart(symbol, "1mo", "1d", prepost=False)
+    if result["meta"].get("exchangeTimezoneName") != "America/New_York":
+        raise ValueError("参考标的缺少纽约交易所时区")
+    series = ((result.get("indicators") or {}).get("quote") or [{}])[0] or {}
+    closes = {}
+    for timestamp, close in zip(result.get("timestamp") or [], series.get("close") or []):
+        if not isinstance(timestamp, int) or not isinstance(close, (int, float)):
+            continue
+        # 雅虎美国常规日线时间戳在 UTC 和纽约属于同一日期。
+        day = market_day(timestamp)
+        if day < china_day and math.isfinite(close) and close > 0:
+            closes[day] = close
+    days = sorted(closes)
+    if len(days) < 2 or days[-1] < earliest:
+        return None
+    previous, latest = days[-2:]
+    return {"day": latest, "previousDay": previous,
+            "pct": (closes[latest] / closes[previous] - 1) * 100}
 
 
 def yahoo_quote(sym):
@@ -693,6 +720,14 @@ class Handler(SimpleHTTPRequestHandler):
             if u.path == "/api/quotes":
                 syms = [s for s in (qs.get("s", [""])[0]).split(",") if s]
                 return self.send_json(get_quotes(syms))
+            if u.path == "/api/group-reference":
+                symbol = qs.get("s", [""])[0]
+                day = qs.get("day", [""])[0]
+                if symbol not in US_GROUP_REFERENCES or day != asia_quote_day(time.time(), True):
+                    return self.send_json({"error": "无效参考标的或 A 股日期"}, 400)
+                result = cached(("group-reference", symbol, day), 300,
+                                lambda: us_group_reference(symbol, day))
+                return self.send_json({"reference": result})
             if u.path == "/api/spark":
                 syms = [x for x in (qs.get("s", [""])[0]).split(",") if x]
                 return self.send_json(sparks(syms))

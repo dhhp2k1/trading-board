@@ -23,6 +23,9 @@ let MINI = new URLSearchParams(location.search).has("mini");   // 小窗模式�
 let state = load();
 let quotes = {};
 let timer = null;
+let watchQuoteRequest = 0;
+let watchQuoteCompleted = 0;
+let watchQuoteSnapshot = null;
 
 function load() {
   try { return Object.assign(structuredClone(DEFAULT_STATE), JSON.parse(localStorage.getItem(LS_KEY))); }
@@ -104,11 +107,17 @@ function allSymbols() {
 }
 
 async function refresh() {
+  const request = ++watchQuoteRequest;
+  const group = state.group;
   try {
     const syms = allSymbols();
     const r = await fetch("/api/quotes?s=" + encodeURIComponent(syms.join(",")));
     const data = await r.json();
     const prev = quotes;
+    if (request > watchQuoteCompleted) {
+      watchQuoteCompleted = request;
+      watchQuoteSnapshot = r.ok ? { group, quotes: data } : null;
+    }
     quotes = Object.assign({}, quotes, data);
     renderTicker();
     renderWatch(prev);
@@ -117,6 +126,11 @@ async function refresh() {
     if (ovList().length) renderOvChips();
     $("#status").textContent = "已更新 " + new Date().toLocaleTimeString("zh-CN", { hour12: false }) + " · 报价：腾讯（A股/港股）、雅虎（美股/全球） · K线：东方财富，失败时回退腾讯/雅虎";
   } catch (e) {
+    if (request > watchQuoteCompleted) {
+      watchQuoteCompleted = request;
+      watchQuoteSnapshot = null;
+      notifyGroupBrief(state.groups[state.group] || []);
+    }
     $("#status").textContent = "刷新失败：" + e;
   }
 }
@@ -224,6 +238,18 @@ function watchName(symbol, quote) {
   }
   return label === first && words.length ? label + " · " + code : label;
 }
+function notifyGroupBrief(symbols) {
+  document.dispatchEvent(new CustomEvent("board:watch-quotes", {
+    detail: { symbols, quotes: watchQuoteSnapshot?.group === state.group ? watchQuoteSnapshot.quotes : {},
+      reference: state.groupReference },
+  }));
+}
+
+document.addEventListener("board:group-reference", (event) => {
+  state.groupReference = event.detail;
+  save();
+});
+
 function renderWatch(prev = {}) {
   let list = [...(state.groups[state.group] || [])];
   if (state.sort) {
@@ -283,6 +309,7 @@ function renderWatch(prev = {}) {
   $("#watchCount").textContent = `${list.length} 只`;
   if (L.view === "heat") renderHeat(list);
   needSparks(list);
+  notifyGroupBrief(list);
 }
 
 /* ---------- 外观：主题 + 自选栏显示方式 ---------- */

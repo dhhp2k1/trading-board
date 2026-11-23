@@ -5,7 +5,7 @@
 <title>交易看板</title>
 <link rel="icon" href="img/logo.svg" type="image/svg+xml">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="style.css?v=0.8.8">
+<link rel="stylesheet" href="style.css?v=next-group-brief">
 <link rel="stylesheet" href="news.css">
 <link rel="stylesheet" href="ecocal.css">
 </head>
@@ -38,6 +38,20 @@
       </span>
     </div>
     <div class="tabs" id="groupTabs"></div>
+    <details id="groupBrief" hidden>
+      <summary>A 股组内强弱</summary>
+      <div id="groupBreadth"></div>
+      <small id="groupCoverage" class="muted"></small>
+      <label for="groupReference">美股隔夜对照</label>
+      <select id="groupReference">
+        <option value="^GSPC">标普500</option>
+        <option value="^IXIC">纳斯达克综合</option>
+        <option value="^DJI">道琼斯</option>
+        <option value="QQQ">纳指100 ETF（QQQ）</option>
+        <option value="NVDA">英伟达（NVDA）</option>
+      </select>
+      <small id="groupOvernight"></small>
+    </details>
     <div id="heat"></div>
     <div id="watchScroll">
       <table id="watch" role="table" aria-labelledby="watchHeading">
@@ -202,7 +216,8 @@
 
 <script src="lightweight-charts.standalone.production.js"></script>
 <script src="chart-drawings.js?v=0.8.2"></script>
-<script src="app.js?v=0.8.7"></script>
+<script src="app.js?v=next-group-brief"></script>
+<script src="group-brief.js"></script>
 <script src="news.js" onerror="void 0"></script>
 <script src="ecocal.js" onerror="void 0"></script>
 </body>

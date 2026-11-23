@@ -272,6 +272,13 @@ body[data-theme="graphite"] #cName, body[data-theme="graphite"] .big { color: va
 #groupTabs button:hover, #groupTabs button.on { background: var(--input); color: var(--white); }
 #groupTabs button.on { border-color: var(--border2); box-shadow: inset 0 -2px 0 var(--head); }
 
+#groupBrief { flex: 0 0 auto; padding: 5px 10px; border-bottom: 1px solid var(--line); }
+#groupBrief summary { cursor: pointer; }
+#groupBrief[open] summary { margin-bottom: 5px; }
+#groupBreadth, #groupBrief small { display: block; margin-bottom: 4px; }
+#groupBrief select { max-width: 100%; margin: 0 0 4px; }
+#groupBrief label { margin-right: 4px; }
+body.mini #groupBrief { display: none; }
 #watchScroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
 #watch, #watch thead, #watch tbody { display: block; }
 #watch { color: var(--white); font-variant-numeric: tabular-nums;
