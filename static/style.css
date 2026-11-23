@@ -275,11 +275,15 @@ body[data-theme="graphite"] #cName, body[data-theme="graphite"] .big { color: va
 #watchScroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
 #watch, #watch thead, #watch tbody { display: block; }
 #watch { color: var(--white); font-variant-numeric: tabular-nums;
-  --watch-left-columns: minmax(0, 1fr) minmax(0, 1fr);
-  --watch-right-columns: 5.55rem 5.3rem; }
+  --watch-left-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  --watch-right-columns: 4.7rem 5.15rem;
+  --watch-gap: .35rem;
+  --watch-inset-start: .8rem;
+  --watch-inset-end: .45rem; }
 body.wl-nospark #watch { --watch-left-columns: minmax(0, 1fr); }
 #watch tr { display: grid; grid-template-columns: var(--watch-left-columns) var(--watch-right-columns);
-  column-gap: .55rem; align-items: center; padding-inline: .8rem .45rem; }
+  column-gap: var(--watch-gap); align-items: center;
+  padding-inline: var(--watch-inset-start) var(--watch-inset-end); }
 #watch :is(th, td):first-child { grid-column: 1; }
 #watch :is(.watch-spark, .watch-spark-head) { grid-column: 2; }
 #watch :is(.watch-price-head, .watch-quote) { grid-column: -3 / -2; }
@@ -311,7 +315,7 @@ body.wl-nospark #watch { --watch-left-columns: minmax(0, 1fr); }
 #watch tr:hover .watch-remove, .watch-remove:focus-visible { opacity: 1; }
 .watch-meta { min-height: 1.05rem; }
 .watch-code { flex: 0 1 auto; min-width: 0; color: var(--watch-quiet); font-size: .82rem; line-height: 1.15; }
-.watch-spark { min-width: 0; padding-inline: .15rem; }
+.watch-spark { min-width: 0; }
 .watch-spark .sp { display: block; width: 100%; height: 1.8rem; }
 svg.sp line.base { stroke: var(--muted); stroke-width: .6; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; opacity: .7; }
 .watch-quote, .watch-performance { display: grid; grid-template: 1.6rem 1.05rem / minmax(0, 1fr);
@@ -340,9 +344,9 @@ body.wl-dense .watch-spark .sp { height: 1.12rem; }
 .leftfoot button:hover { border-color: var(--head); background: var(--hl); color: var(--white); }
 
 @container (max-width: 21rem) {
-  #watch { --watch-left-columns: minmax(0, 1.35fr) minmax(0, 1fr);
-    --watch-right-columns: 3.25rem 5.5rem; }
-  #watch tr { column-gap: .4rem; padding-inline: .55rem .35rem; }
+  #watch { --watch-left-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    --watch-right-columns: 3.25rem 5.5rem;
+    --watch-inset-start: .55rem; --watch-inset-end: .35rem; }
   #watch tbody tr { grid-template-rows: 1fr 1fr; row-gap: .14rem; }
   #watch :is(.watch-symbol, .watch-spark) { grid-row: 1 / 3; }
   #watch :is(.watch-quote, .watch-performance) { grid-column: -3 / -1;
@@ -351,6 +355,17 @@ body.wl-dense .watch-spark .sp { height: 1.12rem; }
   .watch-performance { grid-row: 2; align-self: start; }
   .watch-change, .watch-performance .ext { order: -1; }
   .watch-pct.pill { min-width: 0; }
+}
+
+@supports (grid-template-columns: subgrid) {
+  @container (width > 21rem) {
+    /* 表头和所有行情行按同一组列宽排列，报价列的宽度由内容决定。 */
+    #watch { display: grid; column-gap: var(--watch-gap);
+      grid-template-columns: var(--watch-left-columns) fit-content(5.55rem) fit-content(5.3rem); }
+    #watch :is(thead, tbody, tr) {
+      display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;
+    }
+  }
 }
 
 /* 热力图视图 */
