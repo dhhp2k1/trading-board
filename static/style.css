@@ -462,3 +462,10 @@ body.mini #watch tr:hover .watch-name { margin-right: 0; }
 #updateDialog { background: var(--bg, #171b20); color: var(--fg, #eee); border: 1px solid #69737c; border-radius: 6px; width: min(360px, 85vw); padding: 16px; }
 #updateDialog::backdrop { background: #0008; }
 #updateDialog form { display: flex; align-items: center; justify-content: space-between; }
+
+#intradayContext { flex: none; padding: 4px 8px; border-bottom: 1px solid var(--line); font-size: .91em; }
+#intradayContext small { display: block; color: var(--muted); }
+#industryName { color: var(--accent); }
+#intradayContext select, #intradayContext button { font-size: inherit; }
+#industryBlock:not([hidden]) { margin-bottom: 3px; }
+#intradayContext button[aria-pressed="true"] { color: #68c9ff; }

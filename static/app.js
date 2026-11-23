@@ -783,6 +783,7 @@ function colors() {
   return state.redUp ? { up: "#ff3b3b", down: "#26d07c" } : { up: "#26d07c", down: "#ff3b3b" };
 }
 function clearSeries() {
+  window.dispatchEvent(new Event("board:chart-clear"));
   drawings?.bind(null);
   series.forEach((s) => chart.removeSeries(s));
   series = []; mainSeries = null; ovSeries = [];
@@ -906,6 +907,7 @@ function renderChart(d, fit, key = shownKey) {
   else if (n > 160) chart.timeScale().setVisibleLogicalRange({ from: n - 160, to: n + 4 });
   else chart.timeScale().fitContent();
   drawings?.bind(mainSeries, key);
+  window.dispatchEvent(new CustomEvent("board:chart-ready", {detail: key}));
   drawOverlays();
   showLegend(null);
 }

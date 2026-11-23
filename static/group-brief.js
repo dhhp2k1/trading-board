@@ -5,14 +5,11 @@
   if (!panel) return;
   const breadth = document.querySelector("#groupBreadth");
   const coverage = document.querySelector("#groupCoverage");
-  const reference = document.querySelector("#groupReference");
-  const overnight = document.querySelector("#groupOvernight");
   const minute = 60 * 1000;
   const shanghaiOffset = 8 * 60 * minute;
   const formatPct = (value) => (value > 0 ? "+" : "") + value.toFixed(2) + "%";
   const formatDay = (day) => day.replaceAll("-", "");
   let snapshot = { symbols: [], quotes: {} };
-  let comparison = null;
 
   function groupStats({ symbols, quotes }, now) {
     const mainland = [...new Set(symbols.filter((symbol) => /^(sh|sz|bj)\d{6}$/.test(symbol)))];
@@ -42,40 +39,6 @@
     };
   }
 
-  function renderComparison(day) {
-    if (!day) {
-      comparison = null;
-      overnight.className = "";
-      overnight.textContent = "有当日 A 股有效行情后显示";
-      return;
-    }
-    const key = day + "/" + reference.value;
-    if (comparison?.key === key && Date.now() < comparison.expires) return;
-    const request = { key, expires: Infinity };
-    comparison = request;
-    overnight.className = "";
-    overnight.textContent = "正在读取常规时段收盘";
-    const query = new URLSearchParams({ s: reference.value, day });
-    fetch("/api/group-reference?" + query)
-      .then(async (response) => {
-        if (!response.ok) throw new Error("reference unavailable");
-        return (await response.json()).reference;
-      })
-      .then((result) => {
-        if (comparison !== request) return;
-        request.expires = Date.now() + 5 * minute;
-        overnight.textContent = result
-          ? `${formatDay(result.day)}（美东）收盘 ${formatPct(result.pct)} · 较 ${formatDay(result.previousDay)}`
-          : "近期缺少可用的美股常规收盘";
-        overnight.className = result?.pct > 0 ? "up" : result?.pct < 0 ? "down" : "";
-      })
-      .catch(() => {
-        if (comparison !== request) return;
-        request.expires = Date.now() + minute;
-        overnight.textContent = "美股收盘数据暂不可用";
-      });
-  }
-
   function render() {
     if (!panel.open || panel.getClientRects().length === 0) return;
     const stats = groupStats(snapshot, Date.now());
@@ -92,20 +55,12 @@
     } else {
       coverage.textContent = stats.total ? `A 股市场标的覆盖 0/${stats.total} · 开盘后等候有效报价` : "当前组无 A 股市场标的";
     }
-    renderComparison(count ? stats.day : null);
+
   }
 
   coverage.title = "仅统计沪深京当日有成交、且距盘中当前时间不超过 5 分钟的报价。午休和收盘后以该时段结束时间为准。";
-  overnight.title = "取 A 股该交易日开盘前已结束的最近一场美股常规交易，与上一场常规交易收盘比较。数据来自雅虎。";
   document.addEventListener("board:watch-quotes", (event) => {
     snapshot = event.detail;
-    if ([...reference.options].some((option) => option.value === snapshot.reference)) {
-      reference.value = snapshot.reference;
-    }
-    render();
-  });
-  reference.addEventListener("change", () => {
-    document.dispatchEvent(new CustomEvent("board:group-reference", { detail: reference.value }));
     render();
   });
   panel.addEventListener("toggle", render);

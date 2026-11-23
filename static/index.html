@@ -39,18 +39,9 @@
     </div>
     <div class="tabs" id="groupTabs"></div>
     <details id="groupBrief" hidden>
-      <summary>A 股组内强弱</summary>
+      <summary>自选组涨跌分布</summary>
       <div id="groupBreadth"></div>
       <small id="groupCoverage" class="muted"></small>
-      <label for="groupReference">美股隔夜对照</label>
-      <select id="groupReference">
-        <option value="^GSPC">标普500</option>
-        <option value="^IXIC">纳斯达克综合</option>
-        <option value="^DJI">道琼斯</option>
-        <option value="QQQ">纳指100 ETF（QQQ）</option>
-        <option value="NVDA">英伟达（NVDA）</option>
-      </select>
-      <small id="groupOvernight"></small>
     </details>
     <div id="heat"></div>
     <div id="watchScroll">
@@ -108,6 +99,17 @@
         <button id="drawUndo" title="撤销当前图表的最后一条线" disabled>撤销划线</button>
       </div>
     </div>
+    <section id="intradayContext" aria-label="盘中相对走势" hidden>
+      <div id="industryBlock" hidden><strong id="industryName"></strong> <span id="industryStats"></span>
+        <button type="button" id="industryPlot" hidden>叠加行业分时</button>
+        <small id="industryMeta"></small></div>
+      <div id="overseasBlock"><label>海外同期 <select id="sessionRef">
+        <option value="">选择参考</option><option value="NQ">纳指100期货</option><option value="ES">标普500期货</option>
+        <option value="GC">黄金期货</option><option value="CL">WTI原油期货</option>
+        <option value="NVDA">英伟达夜盘</option><option value="AAPL">苹果夜盘</option><option value="TSLA">特斯拉夜盘</option>
+      </select></label> <span id="sessionStats"></span>
+      <button type="button" id="sessionPlot" hidden>叠加同期分时</button><small id="sessionMeta"></small></div>
+    </section>
     <div id="chartFrame">
       <div id="chart"></div>
       <div id="drawHint" role="status" hidden></div>
@@ -254,6 +256,7 @@
 <script src="app.js?v=next-etf-peers"></script>
 <script src="group-brief.js"></script>
 <script src="etf-peers.js"></script>
+<script src="intraday-context.js"></script>
 <script src="news.js" onerror="void 0"></script>
 <script src="ecocal.js" onerror="void 0"></script>
 </body>

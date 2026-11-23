@@ -22,9 +22,9 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 版本戳：每次发版改这里。顶栏会显示，桌面启动器也用它判断后台跑的是不是旧版本
-VERSION = "0.8.11"
+VERSION = "0.8.12"
 CHANNEL = "next"
-BUILD = "2026-11-23 16:12"
+BUILD = "2026-11-24 01:18"
 
 PORT = int(os.environ.get("BOARD_PORT", "8765"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -727,6 +727,14 @@ class Handler(SimpleHTTPRequestHandler):
             if u.path == "/api/quotes":
                 syms = [s for s in (qs.get("s", [""])[0]).split(",") if s]
                 return self.send_json(get_quotes(syms))
+            if u.path == "/api/session-compare":
+                import session_compare
+                return self.send_json(session_compare.compare(qs.get("s", [""])[0], qs.get("ref", [""])[0],
+                                                               cached, tencent_kline, yahoo_chart))
+            if u.path == "/api/industry-strength":
+                import industry_strength
+                return self.send_json(industry_strength.handle(qs.get("s", [""])[0], quote_loader=tencent_quotes,
+                                                               http_get=http_get))
             if u.path == "/api/etf-peers":
                 import etf_peers
                 symbol = qs.get("s", [""])[0]
