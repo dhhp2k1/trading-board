@@ -21,8 +21,8 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 版本戳：每次发版改这里。顶栏会显示，桌面启动器也用它判断后台跑的是不是旧版本
-VERSION = "0.8.4"
-BUILD = "2026-11-20 14:28"
+VERSION = "0.8.5"
+BUILD = "2026-11-23 13:38"
 
 PORT = int(os.environ.get("BOARD_PORT", "8765"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -125,6 +125,9 @@ def tencent_quotes(codes):
 
 # ---------------- 雅虎：美股 / 全球指数 ----------------
 def yahoo_chart(sym, rng, interval, prepost=False, period1=None, period2=None):
+    # 兼容自选和指数条里保存的旧代码；雅虎使用 ^VIX 表示波动率指数。
+    if sym.upper() == "VIX":
+        sym = "^VIX"
     win = f"period1={int(period1)}&period2={int(period2)}" if period1 else f"range={rng}"
     path = (f"/v8/finance/chart/{urllib.parse.quote(sym)}"
             f"?{win}&interval={interval}&includePrePost={'true' if prepost else 'false'}")

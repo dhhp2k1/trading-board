@@ -1,7 +1,7 @@
 {
-  "version": "0.8.4",
-  "build": "2026-11-20 14:28",
-  "notes": "修复海外标的报价详情。雅虎返回空数据时切换备用入口，无实时价时展示注明日期的日K报价，补充可用的开盘价。",
+  "version": "0.8.5",
+  "build": "2026-11-23 13:38",
+  "notes": "修复 VIX 指数行情 404。兼容自选和指数条中已保存的旧代码。",
   "requirements_changed": false,
   "files": {
     ".gitignore": "3c9e2e7a536e9299f197dc1e910ba49b80a85c24d0d6a4204383c85dbbc1a20f",
@@ -11,7 +11,7 @@
     "ecocal.py": "0cf893255e9c8d0fa82dee9f12203690b4ca47fe923dad22839bc8d517055ee8",
     "news.py": "f499382851d10eaa9711616a637a66846b2208196d5050aa1059bf7ebca1dfba",
     "requirements.txt": "7484bd492aa4bc491526a79c82e053e93c403034a923e224caa381ed67a9c4ce",
-    "server.py": "fdbbda06354d6088c41e4e894e8427c61f2f5d79cad7573e05c9709538add595",
+    "server.py": "ea56406face1a8469e9dcead9e5a152a287efa7d2cbd4ba4772b83de9f35471b",
     "start.bat": "b4d7168880a9b7c247d550415cadfba24abddff7321f201189f24b7b378e954b",
     "static/app.js": "05f57873d6f655a8db1198fdf1a8f4dfb9b166765fb5730197f0fca0d4b6eb8c",
     "static/chart-drawings.js": "8d26d5e748e74ef2615b54128dea3f668a46a4d5d5ecf018e5b9709dfd2a96bb",
