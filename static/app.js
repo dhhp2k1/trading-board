@@ -1348,6 +1348,7 @@ function updateQuoteHistory(s) {
 
 function renderDetail() {
   const s = state.selected; const live = quotes[s] || {};
+  window.dispatchEvent(new CustomEvent("board:quote", { detail: { symbol: s, quote: live } }));
   $("#cName").textContent = live.name || displayCode(s);
   $("#cAdd").classList.toggle("show", !!s && !(state.groups[state.group] || []).includes(s));
   $("#cCode").textContent = displayCode(s);

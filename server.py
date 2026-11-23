@@ -22,9 +22,9 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 版本戳：每次发版改这里。顶栏会显示，桌面启动器也用它判断后台跑的是不是旧版本
-VERSION = "0.8.10"
+VERSION = "0.8.11"
 CHANNEL = "next"
-BUILD = "2026-11-23 15:40"
+BUILD = "2026-11-23 16:12"
 
 PORT = int(os.environ.get("BOARD_PORT", "8765"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -107,6 +107,10 @@ def tencent_quotes(codes):
                 "change": chg,
                 "pct": (chg / prev * 100) if chg is not None else None,
                 "volume": fnum(body[6]),
+                "bid": fnum(body[9]),
+                "ask": fnum(body[19]),
+                # 腾讯字段 35 为 成交价/成交量(手)/成交额(元)。
+                "amount": fnum(body[35].split("/")[2]) if len(body) > 35 and body[35].count("/") == 2 else None,
                 "time": ts,
                 "timestamp": timestamp,
                 "sparkDay": asia_quote_day(timestamp, opened),
@@ -723,6 +727,10 @@ class Handler(SimpleHTTPRequestHandler):
             if u.path == "/api/quotes":
                 syms = [s for s in (qs.get("s", [""])[0]).split(",") if s]
                 return self.send_json(get_quotes(syms))
+            if u.path == "/api/etf-peers":
+                import etf_peers
+                symbol = qs.get("s", [""])[0]
+                return self.send_json(etf_peers.compare(symbol, tencent_quotes, cached, http_get))
             if u.path == "/api/group-reference":
                 symbol = qs.get("s", [""])[0]
                 day = qs.get("day", [""])[0]

@@ -437,8 +437,27 @@ body.mini #watch tr:hover .watch-name { margin-right: 0; }
 #suggest div .sadd:hover { color: #000; background: var(--accent); border-color: var(--accent); }
 #suggest div.in .sadd { opacity: .5; }
 #cAdd { margin-left: 8px; padding: 0 8px; border: 1px solid rgba(0,0,0,.4); background: rgba(0,0,0,.15); color: var(--head-text); font-weight: 700; display: none; }
-#cAdd:hover { background: #000; color: var(--head); }
+#cAdd:hover, #etfPeersOpen:hover { background: #000; color: var(--head); }
 #cAdd.show { display: inline-block; }
+#etfPeersOpen { margin-left: 8px; padding: 0 8px; white-space: nowrap; color: var(--head-text);
+  border: 1px solid rgba(0,0,0,.4); background: rgba(0,0,0,.15); font-weight: 700; }
+#etfPeersDialog { width: min(64rem, 94vw); max-height: 86vh; background: var(--pop); }
+#etfPeersDialog form { display: flex; justify-content: space-between; align-items: center;
+  padding: .35rem .7rem; background: var(--head); color: var(--head-text); }
+.etf-peers-content { padding: .65rem .75rem; }
+.etf-peers-controls { display: flex; gap: .6rem; align-items: center; justify-content: space-between; }
+.etf-peers-controls button { margin-left: auto; }
+.etf-peers-scroll { max-height: 55vh; overflow: auto; }
+#etfPeersDialog table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+#etfPeersDialog th, #etfPeersDialog td { padding: .3rem .45rem; text-align: right; white-space: nowrap;
+  border-bottom: 1px solid var(--line); }
+#etfPeersDialog th { position: sticky; top: 0; z-index: 1; background: var(--pop); color: var(--muted); }
+#etfPeersDialog th:first-child, #etfPeersDialog td:first-child { text-align: left; }
+#etfPeersDialog th button { padding: 0 .2rem; }
+#etfPeersDialog th[aria-sort="ascending"] button::after { content: " ↑"; }
+#etfPeersDialog th[aria-sort="descending"] button::after { content: " ↓"; }
+#etfPeersDialog td small { display: block; color: var(--muted); }
+#etfPeersDialog tr.etf-current { background: var(--hl); }
 
 #updateDialog { background: var(--bg, #171b20); color: var(--fg, #eee); border: 1px solid #69737c; border-radius: 6px; width: min(360px, 85vw); padding: 16px; }
 #updateDialog::backdrop { background: #0008; }

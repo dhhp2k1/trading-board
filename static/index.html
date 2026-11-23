@@ -5,7 +5,7 @@
 <title>交易看板</title>
 <link rel="icon" href="img/logo.svg" type="image/svg+xml">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="style.css?v=next-group-brief">
+<link rel="stylesheet" href="style.css?v=next-etf-peers">
 <link rel="stylesheet" href="news.css">
 <link rel="stylesheet" href="ecocal.css">
 </head>
@@ -74,7 +74,8 @@
 
   <section id="center" class="panel">
     <div class="ph"><span class="pn">2</span> 图表 <span id="cName"></span><span id="cCode" class="muted"></span>
-      <span id="cPrice" class="big"></span><span id="cPct"></span><button id="cAdd" title="加入当前分组">＋ 加自选</button></div>
+      <span id="cPrice" class="big"></span><span id="cPct"></span><button id="cAdd" title="加入当前分组">＋ 加自选</button>
+      <button id="etfPeersOpen" type="button" aria-haspopup="dialog" hidden>ETF 对照</button></div>
     <div class="toolbar">
       <div class="seg" id="periods">
         <button data-p="min">分时</button>
@@ -220,10 +221,39 @@
   <p id="updateResult" role="status"></p>
   <button id="installChecked" type="button" disabled>安装并重启</button>
 </dialog>
+<dialog id="etfPeersDialog" aria-labelledby="etfPeersTitle">
+  <form method="dialog">
+    <strong id="etfPeersTitle">同指数 ETF 对照</strong>
+    <button aria-label="关闭" autofocus>×</button>
+  </form>
+  <div class="etf-peers-content">
+    <div class="etf-peers-controls">
+      <strong id="etfPeersIndex" hidden></strong>
+      <button id="etfPeersReload" type="button">刷新报价</button>
+    </div>
+    <p id="etfPeersStatus" role="status"></p>
+    <div class="etf-peers-scroll" id="etfPeersResults" hidden>
+      <table aria-label="同指数 ETF 报价">
+        <thead><tr>
+          <th scope="col">ETF</th>
+          <th scope="col">最新价（元）</th>
+          <th scope="col"><button type="button" data-sort="pct">涨跌幅</button></th>
+          <th scope="col"><button type="button" data-sort="amount">成交额</button></th>
+          <th scope="col">买一 / 卖一（元）</th>
+          <th scope="col"><button type="button" data-sort="spreadBps">价差（基点）</button></th>
+          <th scope="col"><button type="button" data-sort="premium">折溢价</button></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p id="etfPeersNotes" class="muted" hidden></p>
+  </div>
+</dialog>
 <script src="lightweight-charts.standalone.production.js"></script>
 <script src="chart-drawings.js?v=0.8.2"></script>
-<script src="app.js?v=next-group-brief"></script>
+<script src="app.js?v=next-etf-peers"></script>
 <script src="group-brief.js"></script>
+<script src="etf-peers.js"></script>
 <script src="news.js" onerror="void 0"></script>
 <script src="ecocal.js" onerror="void 0"></script>
 </body>
