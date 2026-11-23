@@ -196,14 +196,42 @@ function premTag(q) {
 function watchText(value) {
   return String(value).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 }
+const WATCH_ALIASES = {
+  "yf:AAPL": "Apple",
+  "yf:NVDA": "NVIDIA",
+  "yf:QQQ": "Invesco QQQ",
+  "yf:XBI": "SPDR 生物科技",
+  "yf:SOXX": "iShares 半导体",
+  "yf:SPY": "SPDR 标普500",
+};
+function watchName(symbol, quote) {
+  const code = displayCode(symbol);
+  const name = quote.name || quote.longName || code;
+  if (!symbol.startsWith("yf:") && !symbol.startsWith("hk")) return name;
+  if (WATCH_ALIASES[symbol]) return WATCH_ALIASES[symbol];
+  const short = name
+    .replace(/^State Street\s+(?=SPDR\b)/i, "")
+    .replace(/,\s*Series\s+\w+$/i, "")
+    .replace(/(?:,?\s+(?:Incorporated|Corporation|Company|Limited|Inc\.?|Corp\.?|Ltd\.?|PLC|ETF|Fund|Trust|Co\.?))+$/i, "");
+  if (short.length <= 18) return short || code;
+  const words = short.split(/\s+/);
+  const first = words.shift();
+  if (first.length > 18) return code;
+  let label = first;
+  for (const word of words) {
+    if (label.length + word.length + 1 > 18) break;
+    label += " " + word;
+  }
+  return label === first && words.length ? label + " · " + code : label;
+}
 function renderWatch(prev = {}) {
   let list = [...(state.groups[state.group] || [])];
   if (state.sort) {
     const { key, dir } = state.sort;
     list.sort((a, b) => {
       const qa = quotes[a] || {}, qb = quotes[b] || {};
-      const va = key === "name" ? (qa.name || a) : qa[key] ?? -Infinity;
-      const vb = key === "name" ? (qb.name || b) : qb[key] ?? -Infinity;
+      const va = key === "name" ? watchName(a, qa) : qa[key] ?? -Infinity;
+      const vb = key === "name" ? watchName(b, qb) : qb[key] ?? -Infinity;
       return (va > vb ? 1 : va < vb ? -1 : 0) * dir;
     });
   }
@@ -216,13 +244,16 @@ function renderWatch(prev = {}) {
     }
   });
   const L = look();
+  const columns = L.spark ? 4 : 3;
+  $("#watchSparkHead").hidden = !L.spark;
   $("#watch tbody").innerHTML = list.length ? list.map((s) => {
     const q = quotes[s] || {};
     const p = prev[s];
     const flash = p && q.price != null && p.price != null && q.price !== p.price
       ? (q.price > p.price ? "flash-up" : "flash-down") : "";
     const symbol = watchText(s), code = watchText(displayCode(s));
-    const name = q.name ? watchText(q.name) : (q.error ? "⚠ " : "") + code;
+    const name = watchText((q.error ? "⚠ " : "") + watchName(s, q));
+    const fullName = watchText(q.longName || q.name || displayCode(s));
     const price = fmt(q.price);
     const move = q.change == null ? "" : (q.change > 0 ? "+" : "") + fmt(q.change);
     const extended = extTag(q);
@@ -230,15 +261,16 @@ function renderWatch(prev = {}) {
     return `<tr role="row" data-s="${symbol}" class="${s === state.selected ? "sel" : ""} ${flash}">
       <td role="cell" class="watch-symbol">
         <div class="watch-name-line">
-          <span class="watch-name" title="${name}">${name}</span>
+          <span class="watch-name" title="${fullName}">${name}</span>
           <button type="button" class="watch-remove" data-del="${symbol}" title="移出当前分组" aria-label="移出 ${code}">×</button>
         </div>
         <div class="watch-meta">
-          <div class="watch-code" title="${code}"><span>${code}</span>${L.range ? rangeBar(q) : ""}</div>
-          ${L.spark ? `<div class="watch-spark" title="日内走势" aria-hidden="true">${sparkSvg(s, q)}</div>` : ""}
+          <span class="watch-code" title="${code}">${code}</span>
           ${extended && premium ? premium : ""}
         </div>
+        ${L.range ? rangeBar(q) : ""}
       </td>
+      ${L.spark ? `<td role="cell" class="watch-spark" title="日内走势">${sparkSvg(s, q)}</td>` : ""}
       <td role="cell" class="watch-quote">
         <div class="watch-price${price.length > 9 ? " long" : ""}" title="${price}">${price}</div>
         ${L.change && move ? `<div class="watch-change ${cls(q.pct)}" title="${move}">${move}</div>` : ""}
@@ -247,7 +279,7 @@ function renderWatch(prev = {}) {
         ${L.pill ? pill(q.pct) : `<span class="watch-pct ${cls(q.pct)}" title="${pctStr(q.pct)}">${pctStr(q.pct)}</span>`}
         ${extended || premium}
       </td></tr>`;
-  }).join("") : '<tr role="row" class="watch-empty"><td role="cell" colspan="3">此分组暂无标的</td></tr>';
+  }).join("") : `<tr role="row" class="watch-empty"><td role="cell" colspan="${columns}">此分组暂无标的</td></tr>`;
   $("#watchCount").textContent = `${list.length} 只`;
   if (L.view === "heat") renderHeat(list);
   needSparks(list);
@@ -274,11 +306,13 @@ function pill(pct) {
   return `<span class="watch-pct pill ${cls(pct)}" style="background:${bg}" title="${value}">${value}</span>`;
 }
 function rangeBar(q) {
-  if (q.high == null || q.low == null || q.price == null || q.high <= q.low) return "";
+  if (![q.high, q.low, q.price].every(Number.isFinite) || q.high <= q.low) return "";
   const pos = (v) => Math.max(0, Math.min(100, (v - q.low) / (q.high - q.low) * 100));
   const c = upDownRGB(q.pct || 0);
-  const pc = q.prevClose != null && q.prevClose >= q.low && q.prevClose <= q.high ? `<i class="pc" style="left:${pos(q.prevClose)}%"></i>` : "";
-  return `<div class="rng" title="今日 低 ${fmt(q.low)} — 高 ${fmt(q.high)}"><b style="width:${pos(q.price)}%;background:rgba(${c.join(",")},.55)"></b>${pc}<i class="now" style="left:${pos(q.price)}%"></i></div>`;
+  const hasOpen = Number.isFinite(q.open) && q.open > 0;
+  const open = hasOpen ? `<i class="open" style="left:${pos(q.open)}%"></i>` : "";
+  const label = `最低 ${fmt(q.low)} · 最高 ${fmt(q.high)}${hasOpen ? " · 今开 " + fmt(q.open) : ""} · 最新 ${fmt(q.price)}`;
+  return `<div class="rng" role="img" aria-label="${label}" title="${label}"><b style="width:${pos(q.price)}%;background:rgba(${c.join(",")},.55)"></b>${open}<i class="now" style="left:${pos(q.price)}%"></i></div>`;
 }
 
 /* 自选分时：开盘换日或首批分钟线缺失时加快重试。 */
@@ -354,7 +388,7 @@ function renderHeat(list) {
     const a = pct == null ? 0 : Math.min(0.95, 0.18 + Math.abs(pct) / 5), c = upDownRGB(pct || 0);
     const bg = pct == null || Math.abs(pct) < 0.005 ? "rgba(128,128,128,.18)" : `rgba(${c.join(",")},${a.toFixed(2)})`;
     return `<div class="tile ${s === state.selected ? "sel" : ""}" data-s="${s}" style="background:${bg}">
-      <div class="tn">${q.name || displayCode(s)}</div>
+      <div class="tn" title="${watchText(q.longName || q.name || displayCode(s))}">${watchText(watchName(s, q))}</div>
       <div class="tp">${pctStr(pct)}</div>
       <div class="tq">${fmt(q.price)}${q.premium != null ? ` · 溢${pctStr(q.premium)}` : ""}</div>
       ${sparkSvg(s, q, true)}</div>`;

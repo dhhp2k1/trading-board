@@ -274,12 +274,21 @@ body[data-theme="graphite"] #cName, body[data-theme="graphite"] .big { color: va
 
 #watchScroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
 #watch, #watch thead, #watch tbody { display: block; }
-#watch { color: var(--white); font-variant-numeric: tabular-nums; }
-#watch tr { display: grid; grid-template: "symbol price pct" auto / minmax(0, 1fr) 5.55rem 5.3rem;
+#watch { color: var(--white); font-variant-numeric: tabular-nums;
+  --watch-left-columns: minmax(0, 1fr) minmax(0, 1fr);
+  --watch-right-columns: 5.55rem 5.3rem; }
+body.wl-nospark #watch { --watch-left-columns: minmax(0, 1fr); }
+#watch tr { display: grid; grid-template-columns: var(--watch-left-columns) var(--watch-right-columns);
   column-gap: .55rem; align-items: center; padding-inline: .8rem .45rem; }
+#watch :is(th, td):first-child { grid-column: 1; }
+#watch :is(.watch-spark, .watch-spark-head) { grid-column: 2; }
+#watch :is(.watch-price-head, .watch-quote) { grid-column: -3 / -2; }
+#watch :is(.watch-pct-head, .watch-performance) { grid-column: -2 / -1; }
 #watch thead { position: sticky; top: 0; z-index: 2; background: var(--watch-surface); border-bottom: 1px solid var(--line); }
 #watch th { min-width: 0; text-align: right; }
 #watch th:first-child { text-align: left; }
+#watch .watch-spark-head { padding-block: .48rem; text-align: center; color: var(--watch-quiet);
+  white-space: nowrap; font-size: .87rem; font-weight: 500; }
 #watch th button { position: relative; max-width: 100%; padding: .48rem 0; border: 0;
   background: transparent; color: var(--watch-quiet); white-space: nowrap; font-size: .87rem; }
 #watch th button:hover, #watch th[aria-sort] button { color: var(--white); }
@@ -291,23 +300,19 @@ body[data-theme="graphite"] #cName, body[data-theme="graphite"] .big { color: va
 #watch tbody tr[data-s]:hover { background-color: var(--hl); }
 #watch tbody tr.sel { background-color: var(--sel); box-shadow: inset 2px 0 0 var(--head); }
 #watch td { min-width: 0; }
-.watch-symbol { grid-area: symbol; }
-.watch-quote { grid-area: price; }
-.watch-performance { grid-area: pct; }
 .watch-name-line, .watch-meta { display: flex; align-items: center; gap: .35rem; min-width: 0; }
 .watch-name-line { position: relative; }
-.watch-name, .watch-code > span, .watch-price, .watch-change, .watch-pct, .watch-performance .ext, .watch-meta .prem {
+.watch-name, .watch-code, .watch-price, .watch-change, .watch-pct, .watch-performance .ext, .watch-meta .prem {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .watch-name { flex: 1; min-width: 0; font-weight: 650; line-height: 1.25; }
 .watch-remove { position: absolute; right: 0; top: 0; padding: 0 .2rem; border: 0;
   border-radius: .2rem; opacity: 0; color: var(--watch-quiet); background: var(--hl); line-height: 1.25; }
 #watch tr:hover .watch-name, #watch tr:focus-within .watch-name { margin-right: .95rem; }
 #watch tr:hover .watch-remove, .watch-remove:focus-visible { opacity: 1; }
-.watch-meta { min-height: 1.45rem; }
+.watch-meta { min-height: 1.05rem; }
 .watch-code { flex: 0 1 auto; min-width: 0; color: var(--watch-quiet); font-size: .82rem; line-height: 1.15; }
-.watch-code > span { display: block; }
-.watch-spark { flex: 1 1 2.5rem; min-width: 1.15rem; max-width: 6rem; }
-.watch-spark .sp { display: block; width: 100%; height: 1.35rem; }
+.watch-spark { min-width: 0; padding-inline: .15rem; }
+.watch-spark .sp { display: block; width: 100%; height: 1.8rem; }
 svg.sp line.base { stroke: var(--muted); stroke-width: .6; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; opacity: .7; }
 .watch-quote, .watch-performance { display: grid; grid-template: 1.6rem 1.05rem / minmax(0, 1fr);
   align-items: center; justify-items: end; row-gap: .1rem; text-align: right; line-height: 1.18; }
@@ -318,11 +323,11 @@ svg.sp line.base { stroke: var(--muted); stroke-width: .6; stroke-dasharray: 2 2
 .watch-pct { max-width: 100%; font-weight: 650; }
 .watch-pct.pill { min-width: 4.4rem; padding: .23rem .32rem; border-radius: .3rem; }
 .watch-performance .ext { line-height: 1.25; }
-.rng { position: relative; height: 2px; margin: .22rem 1px 0; background: rgba(128,128,128,.26); border-radius: 2px; }
+.rng { position: relative; height: 2px; margin: .26rem .2rem .15rem 1px; background: rgba(128,128,128,.26); border-radius: 2px; }
 .rng b { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; }
-.rng i { position: absolute; top: -1px; width: 2px; height: 4px; transform: translateX(-1px); }
-.rng i.now { background: var(--white); }
-.rng i.pc { background: var(--muted); width: 1px; }
+.rng i { position: absolute; top: -2px; width: 2px; height: 6px; transform: translateX(-1px); }
+.rng .open { background: var(--head); width: 1px; }
+.rng .now { background: var(--white); top: -1px; height: 4px; }
 body.wl-dense #watch tbody tr { min-height: 3.05rem; padding-block: .18rem; }
 body.wl-dense .watch-spark .sp { height: 1.12rem; }
 #watch tbody .watch-empty { display: block; }
@@ -335,12 +340,15 @@ body.wl-dense .watch-spark .sp { height: 1.12rem; }
 .leftfoot button:hover { border-color: var(--head); background: var(--hl); color: var(--white); }
 
 @container (max-width: 21rem) {
-  #watch thead tr { grid-template-columns: minmax(0, 1fr) auto auto; }
-  #watch tbody tr { grid-template: "symbol price" 1fr "symbol pct" 1fr / minmax(0, 1fr) fit-content(64%);
-    row-gap: .14rem; padding-inline: .55rem .35rem; }
-  .watch-quote, .watch-performance { display: flex; justify-content: flex-end; align-items: baseline; gap: .42rem; }
-  .watch-quote { align-self: end; }
-  .watch-performance { align-self: start; }
+  #watch { --watch-left-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    --watch-right-columns: 3.25rem 5.5rem; }
+  #watch tr { column-gap: .4rem; padding-inline: .55rem .35rem; }
+  #watch tbody tr { grid-template-rows: 1fr 1fr; row-gap: .14rem; }
+  #watch :is(.watch-symbol, .watch-spark) { grid-row: 1 / 3; }
+  #watch :is(.watch-quote, .watch-performance) { grid-column: -3 / -1;
+    display: flex; justify-content: flex-end; align-items: baseline; gap: .42rem; }
+  .watch-quote { grid-row: 1; align-self: end; }
+  .watch-performance { grid-row: 2; align-self: start; }
   .watch-change, .watch-performance .ext { order: -1; }
   .watch-pct.pill { min-width: 0; }
 }

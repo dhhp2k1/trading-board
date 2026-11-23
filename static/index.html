@@ -5,7 +5,7 @@
 <title>交易看板</title>
 <link rel="icon" href="img/logo.svg" type="image/svg+xml">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="style.css?v=0.8.6">
+<link rel="stylesheet" href="style.css?v=0.8.7">
 <link rel="stylesheet" href="news.css">
 <link rel="stylesheet" href="ecocal.css">
 </head>
@@ -43,8 +43,9 @@
       <table id="watch" role="table" aria-labelledby="watchHeading">
         <thead role="rowgroup"><tr role="row">
           <th role="columnheader" scope="col"><button data-sort="name">证券</button></th>
-          <th role="columnheader" scope="col"><button data-sort="price">最新</button></th>
-          <th role="columnheader" scope="col"><button data-sort="pct">涨跌幅</button></th>
+          <th role="columnheader" scope="col" class="watch-spark-head" id="watchSparkHead">走势</th>
+          <th role="columnheader" scope="col" class="watch-price-head"><button data-sort="price">最新</button></th>
+          <th role="columnheader" scope="col" class="watch-pct-head"><button data-sort="pct">涨跌幅</button></th>
         </tr></thead>
         <tbody role="rowgroup"></tbody>
       </table>
@@ -201,7 +202,7 @@
 
 <script src="lightweight-charts.standalone.production.js"></script>
 <script src="chart-drawings.js?v=0.8.2"></script>
-<script src="app.js?v=0.8.6"></script>
+<script src="app.js?v=0.8.7"></script>
 <script src="news.js" onerror="void 0"></script>
 <script src="ecocal.js" onerror="void 0"></script>
 </body>
