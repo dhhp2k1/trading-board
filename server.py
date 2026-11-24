@@ -22,9 +22,9 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 版本戳：每次发版改这里。顶栏会显示，桌面启动器也用它判断后台跑的是不是旧版本
-VERSION = "0.8.12"
+VERSION = "0.8.13"
 CHANNEL = "next"
-BUILD = "2026-11-24 01:18"
+BUILD = "2026-11-24 10:00"
 
 PORT = int(os.environ.get("BOARD_PORT", "8765"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -504,8 +504,15 @@ def kline(symbol, period):
 
 def tencent_kline(symbol, period):
     if period == "min":
-        d = json.loads(http_get(f"https://web.ifzq.gtimg.cn/appstock/app/minute/query?code={symbol}", timeout=4))
-        node = d["data"][symbol]["data"]
+        # 多日接口也包含当日分钟，避免单日入口在盘中返回 HTTP 501。
+        base = "https://web.ifzq.gtimg.cn/appstock/app"
+        try:
+            d = json.loads(http_get(f"{base}/day/query?code={symbol}", timeout=4))
+            sessions = d["data"][symbol]["data"]
+            node = max((day for day in sessions if day.get("date") and day.get("data")), key=lambda day: day["date"])
+        except (OSError, KeyError, ValueError, TypeError):
+            d = json.loads(http_get(f"{base}/minute/query?code={symbol}", timeout=4))
+            node = d["data"][symbol]["data"]
         date = node["date"]
         bars, last_vol = [], 0.0
         for row in node["data"]:
@@ -730,7 +737,7 @@ class Handler(SimpleHTTPRequestHandler):
             if u.path == "/api/session-compare":
                 import session_compare
                 return self.send_json(session_compare.compare(qs.get("s", [""])[0], qs.get("ref", [""])[0],
-                                                               cached, tencent_kline, yahoo_chart))
+                                                               cached, tencent_kline, yahoo_chart, em_kline))
             if u.path == "/api/industry-strength":
                 import industry_strength
                 return self.send_json(industry_strength.handle(qs.get("s", [""])[0], quote_loader=tencent_quotes,

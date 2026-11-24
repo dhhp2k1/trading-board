@@ -3,7 +3,9 @@
   const board = window.board, box = document.querySelector("#intradayContext");
   if (!board || !box) return;
   const el = (id) => document.getElementById(id);
-  const ref = el("sessionRef");
+  const references = {NQ:"纳指100期货", ES:"标普500期货", GC:"黄金期货", CL:"WTI原油期货",
+    NVDA:"英伟达夜盘", AAPL:"苹果夜盘", TSLA:"特斯拉夜盘"};
+  let reference = "", notice = "";
   const stock = (s) => /^(sh(?:60|68)\d{4}|sz(?:00|30)\d{4}|bj\d{6})$/.test(s);
   const pct = (v) => Number.isFinite(v) ? (v > 0 ? "+" : "") + v.toFixed(2) + "%" : "—";
   const compact = (v) => String(v || "").replace(/^(\d{4})-(\d{2})-(\d{2})/, "$1$2$3");
@@ -37,7 +39,7 @@
     }
     if (data.size < 2) return;
     plotted = chart.addSeries(LW.LineSeries, {color:"#68c9ff", lineWidth:2, priceLineVisible:false,
-      lastValueVisible:false, title:overlay === "industry" ? "行业" : ref.selectedOptions[0].text});
+      lastValueVisible:false, title:overlay === "industry" ? "行业" : references[reference]});
     plotted.setData([...data.values()].sort((a,b)=>a.time-b.time));
   }
   window.addEventListener("board:chart-clear", () => { removeLine(); chartKey = null; });
@@ -45,20 +47,11 @@
   function plot(kind) {
     overlay = overlay === kind && state.period === "min" ? null : kind;
     el("industryPlot").setAttribute("aria-pressed", String(overlay === "industry"));
-    el("sessionPlot").setAttribute("aria-pressed", String(overlay === "session"));
+    if (reference) { reference = ""; generation++; (state.sessionRefs ||= {})[symbol] = ""; save(); }
     if (overlay && state.period !== "min") document.querySelector('#periods [data-p="min"]').click();
     else draw(chartKey || shownKey);
   }
   el("industryPlot").onclick = () => plot("industry");
-  el("sessionPlot").onclick = () => plot("session");
-
-  function suggested(s, name) {
-    if (/纳指|纳斯达克|光模块|中际旭创|新易盛|天孚通信/.test(name)) return "NQ";
-    if (/标普500|标准普尔500/i.test(name) || s === "sh513500") return "ES";
-    if (/黄金/.test(name)) return "GC";
-    if (/原油/.test(name)) return "CL";
-    return "";
-  }
   function renderIndustry(d) {
     industry = d;
     el("industryName").textContent = d?.industry ? d.industry.name + " · " + d.classification : "二级行业";
@@ -76,22 +69,51 @@
     el("industryPlot").hidden = !(d?.timeline?.length > 1);
   }
   function renderSession(d) {
-    session=d;
-    const last=d?.points?.at(-1);
-    el("sessionStats").textContent = last ? "本标的 " + pct(last[1]) + "　参考 " + pct(last[2]) : "";
-    const day=d?.day, now=new Date(Date.now()+8*3600000).toISOString(), today=compact(now.slice(0,10));
-    const delayed=last && day===today && ((now.slice(11,16)>="09:30" && now.slice(11,16)<="11:30") ||
-      (now.slice(11,16)>="13:00" && now.slice(11,16)<="15:00")) &&
-      (Date.now()-Date.parse(now.slice(0,10)+"T"+last[0]+":00+08:00")>5*60000);
-    el("sessionMeta").textContent = [day && (day===today?day:"历史交易日 "+day), last && "09:30–"+last[0]+" 北京时间",
-      delayed && "共同分钟滞后", d?.message, d?.source].filter(Boolean).join(" · ");
-    el("sessionMeta").title = d ? "境内最新分钟 " + (d.cnLast || "—") + "，海外最新分钟 " + (d.refLast || "—") : "";
-    el("sessionPlot").hidden=!last;
+    session = d;
+    const last = d?.points?.at(-1);
+    if (!last) { notice = d?.message || "正在读取同期分时…"; return; }
+    const now = new Date(Date.now() + 8*3600000).toISOString();
+    const today = compact(now.slice(0,10));
+    const hm = now.slice(11,16);
+    const trading = (hm >= "09:30" && hm <= "11:30") || (hm >= "13:00" && hm <= "15:00");
+    const delayed = d.day === today && trading &&
+      Date.now() - Date.parse(now.slice(0,10)+"T"+last[0]+":00+08:00") > 5*60000;
+    notice = (d.day === today ? "" : "历史 ") + d.day + " 09:30–" + last[0] +
+      " · 本标的 " + pct(last[1]) + " / 参考 " + pct(last[2]) + (delayed ? " · 分钟滞后" : "");
   }
 
-  async function load(kind) {
-    const overseas = kind === "session", sym=symbol, selected=ref.value;
-    if (!sym || box.hidden || (overseas ? !selected : !stock(sym))) return;
+  function choose(value) {
+    reference = value;
+    (state.sessionRefs ||= {})[symbol] = value;
+    save();
+    generation++;
+    session = null;
+    notice = "";
+    overlay = value ? "session" : null;
+    removeLine();
+    el("industryPlot").setAttribute("aria-pressed","false");
+    if (!value) return;
+    if (state.period !== "min") document.querySelector('#periods [data-p="min"]').click();
+    load("session", true);
+  }
+
+  window.sessionOverlayMenu = {
+    items() {
+      if (!/^(sh|sz|bj)\d{6}$/.test(symbol)) return [];
+      const items = [{header: "海外同期 · 北京时间 09:30 起"}];
+      if (reference && notice) items.push({label:quoteText(notice), disabled:true});
+      for (const [key, label] of Object.entries(references)) {
+        items.push({label, checked:key === reference, action:() => choose(key === reference ? "" : key)});
+      }
+      return items;
+    },
+    active: () => Boolean(reference),
+    clear() { if (reference) choose(""); }
+  };
+
+  async function load(kind, notify = false) {
+    const overseas = kind === "session", sym=symbol, selected=reference;
+    if (!sym || (overseas ? !selected || state.period !== "min" : !stock(sym))) return;
     const token=generation, key=[token,kind,selected].join("/");
     if (busy.has(key)) return;
     busy.set(key,true);
@@ -100,13 +122,15 @@
       const route=overseas ? "session-compare" : "industry-strength";
       const r=await fetch("/api/"+route+"?"+new URLSearchParams({s:sym,ref:selected}));
       const d=await r.json();
-      if (token!==generation || (overseas && ref.value!==selected)) return;
+      if (token!==generation || (overseas && reference!==selected)) return;
       if(!r.ok) throw Error(d.error || "数据暂不可用");
       render(d);
+      if (overseas && notify) toast(notice);
       if(overlay===kind) draw(chartKey || shownKey);
     } catch(e) {
-      if(token===generation && (!overseas || ref.value===selected)) {
+      if(token===generation && (!overseas || reference===selected)) {
         render(overseas?{message:e.message}:{error:e.message}); if(overlay===kind) removeLine();
+        if (overseas && notify) toast(notice);
       }
     } finally {busy.delete(key);}
   }
@@ -114,23 +138,18 @@
     const s=board.selected;
     if(s===symbol) return;
     symbol=s;generation++;overlay=null;removeLine();renderIndustry(null);renderSession(null);
-    for(const id of ["industryPlot","sessionPlot"]) el(id).setAttribute("aria-pressed","false");
-    box.hidden=!/^(sh|sz|bj)\d{6}$/.test(s);
-    if(box.hidden) return;
-    el("industryBlock").hidden=!stock(s);
-    ref.value=state.sessionRefs?.[s] ?? suggested(s,board.quote()?.name || "");
+    el("industryPlot").setAttribute("aria-pressed", "false");
+    box.hidden = !stock(s);
+    reference = state.sessionRefs?.[s] || "";
+    if (!Object.hasOwn(references,reference)) reference = "";
+    overlay = reference ? "session" : null;
+    notice = "";
+    el("industryBlock").hidden = box.hidden;
     if(stock(s)) el("industryMeta").textContent="正在查询行业与成分行情…";
     load("industry");load("session");
   }
-  ref.onchange=()=>{(state.sessionRefs ||= {})[symbol]=ref.value;save();renderSession(null);
-    if(overlay==="session") {overlay=null;removeLine();el("sessionPlot").setAttribute("aria-pressed","false");} load("session");};
   window.addEventListener("board:select",update);
-  window.addEventListener("board:quote",() => {
-    if(board.selected!==symbol) return update();
-    if(!box.hidden && !ref.value && state.sessionRefs?.[symbol]===undefined) {
-      ref.value=suggested(symbol,board.quote()?.name || ""); if(ref.value) load("session");
-    }
-  });
+  window.addEventListener("board:quote",() => { if(board.selected!==symbol) update(); });
   setInterval(()=>{if(!document.hidden && !MINI){load("industry");load("session");}},30000);
   update();
 })();

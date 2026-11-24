@@ -47,10 +47,19 @@ def overnight(symbol, day_start):
     return [(int(datetime.fromisoformat(b["t"].replace("Z", "+00:00")).timestamp()), b["o"], b["c"]) for b in bars]
 
 
-def compare(symbol, ref, cached, domestic_minutes, yahoo):
+def compare(symbol, ref, cached, domestic_minutes, yahoo, backup_minutes):
     if not re.fullmatch(r"(sh|sz|bj)\d{6}", symbol) or ref not in FUTURES.keys() | STOCKS:
         raise ValueError("标的或海外参考不支持")
-    local = cached(("session-cn", symbol), 20, lambda: domestic_minutes(symbol, "min"))["bars"]
+    def fetch_domestic():
+        for fetch in (domestic_minutes, backup_minutes):
+            try:
+                bars = fetch(symbol, "min")["bars"]
+                if bars:
+                    return bars
+            except (OSError, ValueError, KeyError, TypeError, IndexError):
+                continue
+        return []
+    local = cached(("session-cn", symbol), 20, fetch_domestic)
     if not local:
         return {"message": "暂无境内分时"}
     now = time.time()
@@ -65,6 +74,8 @@ def compare(symbol, ref, cached, domestic_minutes, yahoo):
               "points": [], "cnLast": stamp(max(cn)) if cn else None}
     if start not in cn:
         return dict(result, message="缺少境内 09:30 基准")
+    if not any(x["time"] == start and valid(x.get("volume")) for x in local):
+        return dict(result, message="境内标的 09:30 暂无有效成交，无法建立同期基准")
     def load():
         if ref in STOCKS:
             return overnight(ref, midnight)
