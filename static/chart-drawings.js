@@ -1,14 +1,14 @@
 function createChartDrawings(chart, drawings, save) {
   const tools = document.querySelector("#drawTools");
+  const host = document.querySelector("#chart");
   const buttons = [...tools.querySelectorAll("[data-draw]")];
   const undo = tools.querySelector("#drawUndo");
-  const hint = document.querySelector("#drawHint");
-  const host = document.querySelector("#chart");
-  const scale = chart.timeScale();
-  let series, seriesKey, key, requestUpdate;
-  let mode = null, anchor = null, cursor = null;
-  const current = () => (drawings[key] || []);
-  const ready = () => !!series && key === seriesKey;
+  const groupId = "boardDrawings";
+  let key, displayedKey, activeId, mode;
+  const current = () => drawings[key] || [];
+  const ready = () => !!key && key === displayedKey;
+  const idFor = (index) => groupId + index;
+  const point = (p) => ({ value: p.price, ...(p.time === undefined ? {} : { timestamp: chartTimestamp(p.time) }) });
 
   function refresh() {
     for (const button of buttons) {
@@ -17,105 +17,96 @@ function createChartDrawings(chart, drawings, save) {
     }
     undo.disabled = !ready() || !current().length;
     host.classList.toggle("drawing", !!mode);
-    hint.hidden = !mode;
-    hint.textContent = mode === "horizontal" ? "点击价格 · Esc 取消"
-      : anchor ? "点击终点 · Esc 取消" : "点击起点 · Esc 取消";
-    requestUpdate?.();
   }
 
-  function setMode(next) {
-    mode = next;
-    anchor = cursor = null;
+  function cancel() {
+    if (activeId) chart.removeOverlay({ id: activeId });
+    activeId = mode = null;
     refresh();
   }
 
-  function pointAt(param) {
-    const point = param.point;
-    if (!point || point.x < 0 || point.x >= scale.width() || point.y < 0 ||
-        point.y >= host.clientHeight - scale.height()) return null;
-    if (mode === "trend" && param.time === undefined) return null;
-    const price = series.coordinateToPrice(point.y);
-    return Number.isFinite(price) ? { time: param.time, price } : null;
+  function lineSpec(type, id) {
+    const horizontal = type === "horizontal";
+    return {
+      id, groupId, name: horizontal ? "horizontalStraightLine" : "segment",
+      lock: true, needDefaultPointFigure: false, needDefaultXAxisFigure: false, needDefaultYAxisFigure: false,
+      onRightClick: () => true,
+      styles: { line: { color: "#4fa3ff", size: 1.5, style: horizontal ? "dashed" : "solid", dashedValue: [5, 4] } },
+    };
   }
 
-  const renderer = {
-    draw(target) {
-      if (!ready()) return;
-      target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-        ctx.save();
-        ctx.strokeStyle = ctx.fillStyle = "#4fa3ff";
-        ctx.lineWidth = 1.5;
-        const draw = (line, preview = false) => {
-          const y = series.priceToCoordinate(line.a.price);
-          const horizontal = line.type === "horizontal";
-          const x = horizontal ? 0 : scale.timeToCoordinate(line.a.time);
-          const x2 = horizontal ? mediaSize.width : scale.timeToCoordinate(line.b.time);
-          const y2 = horizontal ? y : series.priceToCoordinate(line.b.price);
-          if ([x, y, x2, y2].some((value) => !Number.isFinite(value))) return;
-          ctx.setLineDash(preview || horizontal ? [5, 4] : []);
-          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x2, y2); ctx.stroke();
-        };
-        current().forEach((line) => draw(line));
-        if (mode === "horizontal" && cursor) draw({ type: mode, a: cursor }, true);
-        if (anchor) {
-          if (cursor) draw({ type: mode, a: anchor, b: cursor }, true);
-          const x = scale.timeToCoordinate(anchor.time), y = series.priceToCoordinate(anchor.price);
-          if (Number.isFinite(x) && Number.isFinite(y)) {
-            ctx.beginPath(); ctx.arc(x, y, 3, 0, 2 * Math.PI); ctx.fill();
-          }
+  for (const button of buttons) button.onclick = () => {
+    if (!ready()) return;
+    const type = button.dataset.draw;
+    const wasActive = mode === type;
+    cancel();
+    if (wasActive) return;
+    mode = type;
+    activeId = idFor(current().length);
+    const id = chart.createOverlay({
+      ...lineSpec(type, activeId),
+      onDrawEnd: ({ overlay }) => {
+        const [a, b] = overlay.points;
+        if (overlay.paneId !== PRICE_PANE || !Number.isFinite(a?.value) ||
+            (type === "trend" && !Number.isFinite(b?.value))) {
+          cancel();
+          return;
         }
-        ctx.restore();
-      });
-    },
-  };
-  const view = { renderer: () => renderer };
-  const primitive = {
-    attached(params) { requestUpdate = params.requestUpdate; },
-    detached() { requestUpdate = null; },
-    paneViews: () => [view],
+        const data = chart.getDataList();
+        const storedPoint = ({ timestamp, dataIndex, value }) => {
+          const t = timestamp ?? data[Math.max(0, Math.min(dataIndex ?? data.length - 1, data.length - 1))].timestamp;
+          return { time: typeof data[0].boardTime === "string" ? new Date(t).toISOString().slice(0, 10) : t / 1000, price: value };
+        };
+        const line = type === "horizontal" ? { type, a: { price: a.value } }
+          : { type, a: storedPoint(a), b: storedPoint(b) };
+        if (line.b && line.a.time === line.b.time && line.a.price === line.b.price) {
+          cancel();
+          return;
+        }
+        (drawings[key] ||= []).push(line);
+        activeId = mode = null;
+        save();
+        refresh();
+      },
+    }, PRICE_PANE);
+    if (!id) cancel();
+    refresh();
   };
 
-  chart.subscribeClick((param) => {
-    if (!mode || !ready()) return;
-    const point = pointAt(param);
-    if (!point) return;
-    if (mode === "trend" && !anchor) {
-      anchor = point;
-      refresh();
-      return;
-    }
-    if (anchor && scale.timeToCoordinate(anchor.time) === scale.timeToCoordinate(point.time) && anchor.price === point.price) return;
-    const line = mode === "trend" ? { type: mode, a: anchor, b: point } : { type: mode, a: { price: point.price } };
-    (drawings[key] ||= []).push(line);
-    save();
-    setMode(null);
-  });
-  chart.subscribeCrosshairMove((param) => {
-    if (!mode || !ready()) return;
-    cursor = pointAt(param);
-    requestUpdate?.();
-  });
-  for (const button of buttons) button.onclick = () => setMode(mode === button.dataset.draw ? null : button.dataset.draw);
   undo.onclick = () => {
+    if (!ready() || !current().length) return;
+    cancel();
+    chart.removeOverlay({ id: idFor(current().length - 1) });
     current().pop();
     if (!current().length) delete drawings[key];
-    save(); refresh();
+    save();
+    refresh();
   };
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && mode) setMode(null);
-  });
+  document.addEventListener("keydown", event => { if (event.key === "Escape" && activeId) cancel(); });
+  refresh();
 
   return {
     setKey(next) {
       if (key === next) return;
       key = next;
-      setMode(null);
+      cancel();
     },
-    bind(next, nextKey) {
-      series?.detachPrimitive(primitive);
-      series = next;
-      seriesKey = nextKey;
-      series?.attachPrimitive(primitive);
+    bind(next) {
+      if (next !== displayedKey) {
+        cancel();
+        chart.removeOverlay({ groupId });
+        displayedKey = next;
+      }
+      if (ready()) {
+        const timestamps = new Set(chart.getDataList().map(bar => bar.timestamp));
+        current().forEach((line, index) => {
+          if (chart.getOverlayById(idFor(index))) return;
+          if (!line.a || (line.type !== "horizontal" && !line.b)) return;
+          const points = line.type === "horizontal" ? [point(line.a)] : [point(line.a), point(line.b)];
+          if (points.some(p => p.timestamp !== undefined && !timestamps.has(p.timestamp))) return;
+          chart.createOverlay({ ...lineSpec(line.type, idFor(index)), points }, PRICE_PANE);
+        });
+      }
       refresh();
     },
   };

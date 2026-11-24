@@ -22,9 +22,9 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 版本戳：每次发版改这里。顶栏会显示，桌面启动器也用它判断后台跑的是不是旧版本
-VERSION = "0.8.13"
+VERSION = "0.8.14"
 CHANNEL = "next"
-BUILD = "2026-11-24 10:00"
+BUILD = "2026-11-24 13:41"
 
 PORT = int(os.environ.get("BOARD_PORT", "8765"))
 ROOT = os.path.dirname(os.path.abspath(__file__))

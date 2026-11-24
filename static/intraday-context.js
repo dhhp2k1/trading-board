@@ -9,16 +9,16 @@
   const stock = (s) => /^(sh(?:60|68)\d{4}|sz(?:00|30)\d{4}|bj\d{6})$/.test(s);
   const pct = (v) => Number.isFinite(v) ? (v > 0 ? "+" : "") + v.toFixed(2) + "%" : "—";
   const compact = (v) => String(v || "").replace(/^(\d{4})-(\d{2})-(\d{2})/, "$1$2$3");
-  let symbol, industry, session, overlay, plotted, chartKey;
+  let symbol, industry, session, overlay, chartKey;
   let generation = 0;
   const busy = new Map();
 
   function removeLine() {
-    if (plotted) { chart.removeSeries(plotted); plotted = null; }
+    chart?.removeIndicator(PRICE_PANE, "BoardSession");
   }
   function draw(key) {
     removeLine();
-    if (!overlay || key !== symbol + "|min" || !chartData?.bars?.length) return;
+    if (!chart || !overlay || key !== symbol + "|min" || !chartData?.bars?.length) return;
     const day = overlay === "industry" ? compact(industry?.day) : session?.day;
     if (!day || !/^\d{8}$/.test(day)) return;
     const iso = day.slice(0,4) + "-" + day.slice(4,6) + "-" + day.slice(6);
@@ -38,9 +38,7 @@
       if (times.has(t)) data.set(t, {time:t, value:base*(1+change/100)});
     }
     if (data.size < 2) return;
-    plotted = chart.addSeries(LW.LineSeries, {color:"#68c9ff", lineWidth:2, priceLineVisible:false,
-      lastValueVisible:false, title:overlay === "industry" ? "行业" : references[reference]});
-    plotted.setData([...data.values()].sort((a,b)=>a.time-b.time));
+    setChartLine(chart, "BoardSession", [...data.values()], "#68c9ff", 2);
   }
   window.addEventListener("board:chart-clear", () => { removeLine(); chartKey = null; });
   window.addEventListener("board:chart-ready", e => { chartKey=e.detail; draw(chartKey); });

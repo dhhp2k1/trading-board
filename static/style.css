@@ -122,8 +122,6 @@ main { flex: 1; display: grid; grid-template-columns: min(var(--leftW, 27rem), 4
 #chart { position: absolute; inset: 0; }
 #chart.drawing canvas { cursor: crosshair; }
 #drawTools button[aria-pressed="true"] { background: var(--head); color: #000; }
-#drawHint { position: absolute; z-index: 2; top: 8px; right: min(7rem, 25%); padding: 2px 6px;
-  background: var(--pop); color: var(--white); pointer-events: none; }
 #legend { padding: 2px 6px; font-size: 0.92rem; height: 1.6rem; border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
 #legend b { font-weight: normal; }
 

@@ -432,13 +432,16 @@ function applyLook() {
   // 图表配色跟随主题
   const cs = getComputedStyle(document.body);
   const v = (n, d) => (cs.getPropertyValue(n).trim() || d);
-  if (typeof chart !== "undefined") chart.applyOptions({
-    layout: { background: { color: v("--bg", "#000") }, textColor: v("--axis", "#c9a35a") },
-    grid: { vertLines: { color: v("--grid", "#161616") }, horzLines: { color: v("--grid", "#161616") } },
-    rightPriceScale: { borderColor: v("--line", "#2a2a2a") }, timeScale: { borderColor: v("--line", "#2a2a2a") },
-    crosshair: { vertLine: { color: v("--head", "#ff8c00"), labelBackgroundColor: v("--head", "#ff8c00") },
-      horzLine: { color: v("--head", "#ff8c00"), labelBackgroundColor: v("--head", "#ff8c00") } },
-  });
+  if (typeof chart !== "undefined" && chart) {
+    const axis = { axisLine: { color: v("--line", "#2a2a2a") }, tickText: { color: v("--axis", "#c9a35a") } };
+    const cross = { line: { color: v("--head", "#ff8c00") }, text: { backgroundColor: v("--head", "#ff8c00"), color: "#000" } };
+    $("#chart").style.backgroundColor = v("--bg", "#000");
+    chart.setStyles({
+      grid: { vertical: { color: v("--grid", "#161616") }, horizontal: { color: v("--grid", "#161616") } },
+      xAxis: axis, yAxis: axis, crosshair: { vertical: cross, horizontal: cross },
+      separator: { color: v("--line", "#2a2a2a") },
+    });
+  }
 }
 function setLook(patch) { state.look = Object.assign(look(), patch); save(); applyLook(); renderLookPop(); renderWatch(); }
 function renderLookPop() {
@@ -760,64 +763,30 @@ $("#btnExport").onclick = () => {
 };
 
 /* ---------- 图表 ---------- */
-const LW = LightweightCharts;
-const chart = LW.createChart($("#chart"), {
-  autoSize: true,
-  layout: { background: { color: "#000000" }, textColor: "#c9a35a", fontFamily: "Cascadia Mono, Consolas, Microsoft YaHei UI", fontSize: 11 },
-  grid: { vertLines: { color: "#161616" }, horzLines: { color: "#161616" } },
-  rightPriceScale: { borderColor: "#2a2a2a" },
-  timeScale: { borderColor: "#2a2a2a", timeVisible: true, secondsVisible: false, rightOffset: 4 },
-  crosshair: { mode: LW.CrosshairMode.Normal,
-    vertLine: { color: "#ff8c00", labelBackgroundColor: "#ff8c00" },
-    horzLine: { color: "#ff8c00", labelBackgroundColor: "#ff8c00" } },
-  localization: { locale: "zh-CN" },
-});
-let series = [];
-let mainSeries = null, chartData = null, iopvLine = null;
+const chart = (() => {
+  try { return createMainChart($("#chart")); }
+  catch (error) { console.warn("主图初始化失败", error); return null; }
+})();
+let chartData = null, renderingChart = false, volumePane = null;
 let drawings = null;
-if (typeof createChartDrawings === "function" && $("#drawTools")) {
+if (chart && typeof createChartDrawings === "function" && $("#drawTools")) {
   try { drawings = createChartDrawings(chart, state.drawings ||= {}, save); }
   catch (error) { console.warn("划线工具初始化失败", error); }
 }
 function colors() {
   return state.redUp ? { up: "#ff3b3b", down: "#26d07c" } : { up: "#26d07c", down: "#ff3b3b" };
 }
-function clearSeries() {
-  window.dispatchEvent(new Event("board:chart-clear"));
-  drawings?.bind(null);
-  series.forEach((s) => chart.removeSeries(s));
-  series = []; mainSeries = null; ovSeries = [];
-}
-
-function ma(bars, n) {
-  const out = []; let sum = 0;
-  for (let i = 0; i < bars.length; i++) {
-    sum += bars[i].close; if (i >= n) sum -= bars[i - n].close;
-    if (i >= n - 1) out.push({ time: bars[i].time, value: sum / n });
-  }
-  return out;
-}
 const MA_DEF = [[5, "#ffd400"], [10, "#ff5fd2"], [20, "#4fa3ff"], [60, "#3ee6e6"]];
 
-function addPriceSeries(d) {
-  const c = colors();
-  const ohlc = d.bars.map(({ time, open, high, low, close }) => ({ time, open, high, low, close }));
-  const t = state.ctype;
-  if (t === "line") {
-    const s = chart.addSeries(LW.LineSeries, { color: "#ffb000", lineWidth: 2 });
-    s.setData(d.bars.map((b) => ({ time: b.time, value: b.close })));
-    return s;
-  }
-  if (t === "bar") {
-    const s = chart.addSeries(LW.BarSeries, { upColor: c.up, downColor: c.down, thinBars: false });
-    s.setData(ohlc); return s;
-  }
-  const hollow = t === "hollow";
-  const s = chart.addSeries(LW.CandlestickSeries, {
-    upColor: hollow ? "rgba(0,0,0,0)" : c.up, downColor: c.down,
-    borderUpColor: c.up, borderDownColor: c.down, wickUpColor: c.up, wickDownColor: c.down,
-  });
-  s.setData(ohlc); return s;
+function updateIopv() {
+  const price = state.showIopv === false ? null : quotes[state.selected]?.iopv;
+  setPriceReference(chart, "boardIopv", "IOPV", price, "#3ee6e6", [2, 3]);
+  const hasRange = chart.getIndicatorByPaneId(PRICE_PANE, "BoardIopvRange");
+  if (Number.isFinite(price) && price > 0 && isIntraday(state.period)) {
+    const spec = { name: "BoardIopvRange", minValue: price, maxValue: price };
+    if (hasRange) chart.overrideIndicator(spec, PRICE_PANE);
+    else chart.createIndicator(spec, true, { id: PRICE_PANE });
+  } else if (hasRange) chart.removeIndicator(PRICE_PANE, "BoardIopvRange");
 }
 
 /* K 线数据缓存：同一标的+周期再次切回时立即显示，后台再静默刷新 */
@@ -843,77 +812,91 @@ let chartReq = 0;
 
 /* 画图：fit=true 时按新数据重新定位视野；fit=false 时保留当前视野（只用于同一标的同一周期的刷新） */
 function renderChart(d, fit, key = shownKey) {
-  const s = state.selected;
-  const keepRange = fit ? null : chart.timeScale().getVisibleLogicalRange();
-  clearSeries();
-  chartData = d;
+  if (!chart || key !== kkey(state.selected, state.period)) return;
+  const previous = chart.getDataList();
+  const spacing = chart.getBarSpace();
+  const previousLast = previous.at(-1);
+  const x = previousLast && chart.convertToPixel({ dataIndex: previous.length - 1 }, { paneId: PRICE_PANE }).x;
+  const offset = x == null ? 4 : (chart.getSize(PRICE_PANE, "main").width - x) / spacing - 0.5;
+  const followLatest = offset >= 0;
+  const quote = quotes[state.selected] || {};
+  const intraday = d.type === "line";
   const c = colors();
-  const intraday = d.type === "line";      // 分时
-  const hasOhlc = d.bars.length && d.bars[0].open !== undefined;
-  if (intraday && (state.ctype === "line" || !hasOhlc)) {
-    const line = chart.addSeries(LW.AreaSeries, {
-      lineColor: "#ffb000", topColor: "rgba(255,176,0,.22)", bottomColor: "rgba(255,176,0,0)", lineWidth: 2,
+  const bars = d.bars.map((b, i) => chartBar(b, d.bars[i - 1]));
+  const area = intraday && (state.ctype === "line" || d.bars[0].open === undefined);
+  const type = area ? "area" : PRICE_TYPES[state.ctype] || "candle_solid";
+  renderingChart = true;
+  try {
+    window.dispatchEvent(new Event("board:chart-clear"));
+    ovSeries.forEach(({ name }) => chart.removeIndicator(PRICE_PANE, name));
+    ovSeries = [];
+    chartData = d;
+    chart.setPriceVolumePrecision(quote.fundType || /^(sh5|sz1)/.test(state.selected) ? 3 : 2, 0);
+    chart.setStyles({
+      candle: {
+        type,
+        area: {
+          lineColor: "#ffb000", lineSize: 2, point: { show: false },
+          backgroundColor: area ? [{ offset: 0, color: "rgba(255,176,0,.22)" }, { offset: 1, color: "rgba(255,176,0,0)" }] : "transparent",
+        },
+        bar: {
+          upColor: c.up, upBorderColor: c.up, upWickColor: c.up,
+          downColor: c.down, downBorderColor: c.down, downWickColor: c.down,
+          noChangeColor: c.up, noChangeBorderColor: c.up, noChangeWickColor: c.up,
+        },
+        priceMark: { last: { upColor: c.up, downColor: c.down, noChangeColor: c.up } },
+      },
+      yAxis: { type: state.logScale ? "log" : "normal" },
     });
-    line.setData(d.bars.map((b) => ({ time: b.time, value: b.value })));
-    mainSeries = line;
-  } else {
-    mainSeries = addPriceSeries(d);
-  }
-  series.push(mainSeries);
-  if ((quotes[s] || {}).fundType || /^(sh5|sz1)/.test(s))   // 场内基金 / 债券报价到 0.001
-    mainSeries.applyOptions({ priceFormat: { type: "price", precision: 3, minMove: 0.001 } });
-  iopvLine = null;
-  if ((quotes[s] || {}).iopv && state.showIopv !== false) {
-    iopvLine = mainSeries.createPriceLine({ price: quotes[s].iopv, color: "#3ee6e6", lineStyle: 1, lineWidth: 1, title: "IOPV" });
-    // 跨境 ETF 溢价常有 10% 以上，IOPV 线会落在可视范围外：让纵轴自动把 IOPV 也包含进来
-    if (isIntraday(state.period)) mainSeries.applyOptions({ autoscaleInfoProvider: (orig) => {
-      const r = orig(), v = (quotes[state.selected] || {}).iopv;
-      if (!r || !r.priceRange || !v || state.showIopv === false) return r;
-      return { priceRange: { minValue: Math.min(r.priceRange.minValue, v), maxValue: Math.max(r.priceRange.maxValue, v) }, margins: r.margins };
-    } });
-  }
-  if (intraday) {
-    const prevClose = d.prevClose || (quotes[s] || {}).prevClose;
-    if (prevClose) mainSeries.createPriceLine({ price: prevClose, color: "#8a7a5a", lineStyle: 2, lineWidth: 1, title: "昨收" });
-    if (d.bars.some((b) => b.avg)) {
-      const avg = chart.addSeries(LW.LineSeries, { color: "#ffd400", lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-      avg.setData(d.bars.filter((b) => b.avg).map((b) => ({ time: b.time, value: b.avg })));
-      series.push(avg);
+    chart.applyNewData(bars, false);
+    const hasMa = chart.getIndicatorByPaneId(PRICE_PANE, "MA");
+    if (!intraday && state.showMA !== false && !hasMa) {
+      chart.createIndicator({
+        name: "MA", calcParams: MA_DEF.map(([n]) => n),
+        styles: { lines: MA_DEF.map(([, color]) => indicatorLineStyle(color)) },
+      }, true, { id: PRICE_PANE });
+    } else if ((intraday || state.showMA === false) && hasMa) chart.removeIndicator(PRICE_PANE, "MA");
+    if (intraday && d.bars.some(b => b.avg)) {
+      setChartLine(chart, "BoardAverage", d.bars.map(b => ({ time: b.time, value: b.avg || undefined })), "#ffd400");
+    } else chart.removeIndicator(PRICE_PANE, "BoardAverage");
+    const volumeColors = { up: c.up + "99", down: c.down + "99" };
+    if (state.showVol === false && volumePane) {
+      chart.removeIndicator(volumePane, "BoardVolume");
+      volumePane = null;
+    } else if (!volumePane && state.showVol !== false) {
+      volumePane = chart.createIndicator({ name: "BoardVolume", extendData: volumeColors }, false,
+        { height: Math.max(55, Math.round($("#chart").clientHeight * 0.18)), minHeight: 40 });
+    } else if (volumePane) chart.overrideIndicator({ name: "BoardVolume", extendData: volumeColors }, volumePane);
+    updateIopv();
+    setPriceReference(chart, "boardPrevClose", "昨收", intraday ? d.prevClose || quote.prevClose : null, "#8a7a5a", [5, 4]);
+
+    if (fit) {
+      const day = (t) => new Date(t).toISOString().slice(0, 10);
+      let count = Math.min(bars.length, 160);
+      if (intraday) {
+        const latestDay = day(bars.at(-1).timestamp);
+        count = 1;
+        while (count < bars.length && day(bars[bars.length - 1 - count].timestamp) === latestDay) count++;
+      }
+      const width = chart.getSize(PRICE_PANE, "main").width;
+      chart.setBarSpace(Math.max(1, Math.min(50, width / (count + 4))));
+      chart.setOffsetRightDistance(4 * chart.getBarSpace());
+    } else {
+      const previousIndex = bars.findIndex(b => b.timestamp === previousLast?.timestamp);
+      const nextOffset = !followLatest && previousIndex >= 0 ? offset + previousIndex - bars.length + 1 : offset;
+      chart.setOffsetRightDistance(Math.max(0, nextOffset * spacing));
+      if (nextOffset < 0) chart.scrollByDistance(-nextOffset * spacing);
     }
-  } else if (state.showMA !== false) {
-    MA_DEF.forEach(([n, color]) => {
-      const l = chart.addSeries(LW.LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-      l.setData(ma(d.bars, n)); series.push(l);
-    });
-  }
-  const vol = chart.addSeries(LW.HistogramSeries, { priceScaleId: "vol", priceFormat: { type: "volume" }, priceLineVisible: false, lastValueVisible: false, visible: state.showVol !== false });
-  chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
-  vol.setData(d.bars.map((b, i) => {
-    const upBar = b.open !== undefined && !intraday ? b.close >= b.open : (i === 0 || b.value >= d.bars[i - 1].value);
-    return { time: b.time, value: b.volume || 0, color: (upBar ? c.up : c.down) + "99" };
-  }));
-  series.push(vol);
-  chart.priceScale("right").applyOptions({ scaleMargins: { top: 0.06, bottom: state.showVol !== false ? 0.22 : 0.04 }, autoScale: true,
-    mode: state.logScale ? LW.PriceScaleMode.Logarithmic : LW.PriceScaleMode.Normal });
-  const n = d.bars.length;
-  if (keepRange) chart.timeScale().setVisibleLogicalRange(keepRange);
-  else if (intraday) {
-    // 分时：默认只显示最近一个交易日，缩小 / 往左拖可看到前几个交易日
-    const day = (t) => new Date(t * 1000).toISOString().slice(0, 10);
-    const lastDay = day(d.bars[n - 1].time);
-    let i = n - 1; while (i > 0 && day(d.bars[i - 1].time) === lastDay) i--;
-    chart.timeScale().setVisibleLogicalRange({ from: i - 0.5, to: n + 2 });
-  }
-  else if (n > 160) chart.timeScale().setVisibleLogicalRange({ from: n - 160, to: n + 4 });
-  else chart.timeScale().fitContent();
-  drawings?.bind(mainSeries, key);
-  window.dispatchEvent(new CustomEvent("board:chart-ready", {detail: key}));
+    drawings?.bind(key);
+  } finally { renderingChart = false; }
+  window.dispatchEvent(new CustomEvent("board:chart-ready", { detail: key }));
   drawOverlays();
   showLegend(null);
 }
 
 async function loadChart(fit = true) {
   if (MINI) return;
+  if (!chart) { $("#legend").textContent = "主图加载失败"; return; }
   const s = state.selected, p = state.period; if (!s) return;
   const k = kkey(s, p);
   drawings?.setKey(k);
@@ -942,8 +925,8 @@ async function loadChart(fit = true) {
 /* 往左拖到最早的 K 线附近时，自动加载更早的历史（东方财富，日期之前 1000 根） */
 let loadingOlder = false;
 const exhausted = new Set();
-chart.timeScale().subscribeVisibleLogicalRangeChange((r) => {
-  if (!r || r.from > 15 || loadingOlder || !chartData || !shownKey) return;
+chart?.subscribeAction("onVisibleRangeChange", (r) => {
+  if (renderingChart || !r || r.from > 15 || loadingOlder || !chartData || !shownKey) return;
   if (shownKey !== kkey(state.selected, state.period)) return;
   if (exhausted.has(shownKey)) return;
   loadOlder();
@@ -955,14 +938,12 @@ async function loadOlder() {
   $("#legend").textContent = "加载更早数据…";
   try {
     const d = await (await fetch(`/api/kline?s=${encodeURIComponent(s)}&p=${p}&before=${first}`)).json();
-    if (shownKey !== k || chartData !== d0) return;
+    if (shownKey !== k || k !== kkey(state.selected, state.period) || chartData !== d0) return;
     const older = (d.bars || []).filter((b) => b.time < first);
     if (!older.length) { exhausted.add(k); showLegend(null); return; }
-    const range = chart.timeScale().getVisibleLogicalRange();
     const merged = Object.assign({}, d0, { bars: older.concat(d0.bars) });
     klineCache.set(k, { d: merged, at: (klineCache.get(k) || {}).at || Date.now() });
-    renderChart(merged, true);
-    if (range) chart.timeScale().setVisibleLogicalRange({ from: range.from + older.length, to: range.to + older.length });
+    renderChart(merged, false);
   } catch { exhausted.add(k); showLegend(null); }
   finally { loadingOlder = false; }
 }
@@ -982,12 +963,9 @@ function prefetch(s) {
 /* 图例：十字光标所在 K 线的开高低收，不在图上时显示最后一根 */
 const PNAME = { min: "分时", m1: "1分", m5: "5分", m15: "15分", m30: "30分", m60: "60分", day: "日K", week: "周K", month: "月K" };
 function showLegend(param) {
-  if (!chartData || !mainSeries) return;
+  if (!chartData) return;
   const d = chartData;
-  let bar = param && param.time !== undefined ? param.seriesData.get(mainSeries) : null;
-  let full = null;
-  if (bar) full = d.bars.find((b) => b.time === param.time);
-  if (!full) full = d.bars[d.bars.length - 1];
+  const full = d.bars[param?.dataIndex] || d.bars.at(-1);
   const tag = `<b style="color:#ff8c00">${PNAME[state.period]}</b> <span class="muted">· ${d.source || ""}</span>`;
   const tstr = typeof full.time === "number" ? new Date(full.time * 1000).toISOString().slice(5, 16).replace("T", " ") : full.time;
   if (d.type === "line") {
@@ -997,9 +975,10 @@ function showLegend(param) {
   }
   const k = full.close >= full.open ? "up" : "down";
   $("#legend").innerHTML = `${tag}  ${tstr}  开 <b class="${k}">${fmt(full.open)}</b> 高 <b class="${k}">${fmt(full.high)}</b> 低 <b class="${k}">${fmt(full.low)}</b> 收 <b class="${k}">${fmt(full.close)}</b>  量 ${fmt(full.volume, 0)}  ` +
-    MA_DEF.map(([n, color]) => `<b style="color:${color}">MA${n}</b>`).join(" ");
+    (state.showMA === false ? [] : MA_DEF).map(([n, color]) => `<b style="color:${color}">MA${n}</b>`).join(" ");
 }
-chart.subscribeCrosshairMove((p) => { showLegend(p); ovLegend(p); });
+chart?.subscribeAction("onCrosshairChange", (p) => { showLegend(p); ovLegend(p); });
+$("#chart").addEventListener("mouseleave", () => { showLegend(null); ovLegend(null); });
 
 /* ---------- 曲线叠加：其他标的按涨跌幅对齐画在主图上（类似 TradingView 的“对比”） ----------
    以当前视野最左边那根 K 线为基准点，叠加标的换算成“同样涨跌幅下主图的价格”，
@@ -1007,7 +986,7 @@ chart.subscribeCrosshairMove((p) => { showLegend(p); ovLegend(p); });
 const OV_COLORS = ["#7c9cff", "#ff79c6", "#e0e0e0", "#c792ea", "#3ee6e6"];
 const ovData = new Map();        // 标的|周期 -> bars
 const ovExhausted = new Set();
-let ovSeries = [];               // [{ sym, s, color }]
+let ovSeries = [];               // [{ sym, name, color }]
 let ovAnchorIdx = null;
 // 叠加按主图标的分别保存：每个标的有自己的一套叠加，切到别的标的不会带过去
 state.ovMap = state.ovMap || {};
@@ -1035,33 +1014,33 @@ function ovAligned(bars) {
 }
 
 function ovAnchor() {
-  const r = chart.timeScale().getVisibleLogicalRange();
+  const r = chart.getVisibleRange();
   const n = chartData.bars.length;
   return Math.min(n - 1, Math.max(0, r ? Math.ceil(r.from) : 0));
 }
 
 function ovPaint(force) {
-  if (!chartData || !mainSeries || !ovSeries.length) return;
+  if (!chartData || !ovSeries.length) return;
   const a = ovAnchor();
   if (!force && a === ovAnchorIdx) return;
   ovAnchorIdx = a;
   const main = chartData.bars;
   for (const o of ovSeries) {
     const bars = ovData.get(kkey(o.sym, state.period));
-    if (!bars) { o.s.setData([]); continue; }
+    if (!bars) continue;
     const al = ovAligned(bars); o.al = al;
     // 基准：视野左边界起第一个两边都有数据的点
     let k = a; while (k < main.length && al[k] == null) k++;
     if (k >= main.length) { k = a; while (k >= 0 && al[k] == null) k--; }
-    if (k < 0) { o.s.setData([]); o.base = null; continue; }
+    if (k < 0) { chart.removeIndicator(PRICE_PANE, o.name); o.base = null; continue; }
     const m0 = ovVal(main[k]), b0 = al[k];
     o.base = b0; o.mainBase = m0;
-    o.s.setData(main.map((b, i) => (al[i] == null ? { time: b.time } : { time: b.time, value: (al[i] / b0) * m0 })));
+    setChartLine(chart, o.name, main.map((b, i) => ({ time: b.time, value: al[i] == null ? undefined : (al[i] / b0) * m0 })), o.color, 2);
   }
 }
 let ovRaf = 0;
-chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
-  if (!ovSeries.length || ovRaf) return;
+chart?.subscribeAction("onVisibleRangeChange", () => {
+  if (renderingChart || !ovSeries.length || ovRaf) return;
   ovRaf = requestAnimationFrame(() => { ovRaf = 0; ovPaint(false); ovLegend(null); });
 });
 
@@ -1087,14 +1066,11 @@ async function ovFetch(sym, p, onFirst) {
 
 function drawOverlays() {
   renderOvChips();
-  if (!chartData || !ovList().length) return;
+  if (!chartData || !ovList().length) { ovLegend(null); return; }
   const p = state.period, sel = state.selected;
   ovSeries = ovList().filter((sym) => sym !== state.selected).map((sym) => {
     const color = OV_COLORS[ovList().indexOf(sym) % OV_COLORS.length];
-    const s = chart.addSeries(LW.LineSeries, { color, lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
-      crosshairMarkerRadius: 3 });
-    series.push(s);
-    return { sym, s, color };
+    return { sym, name: "BoardCompare" + ovList().indexOf(sym), color };
   });
   ovAnchorIdx = null;
   ovPaint(true);
@@ -1115,8 +1091,7 @@ function ovLegend(param) {
   if (!ovSeries.length || !chartData) { if (el) el.remove(); return; }
   if (!el) { el = document.createElement("div"); el.id = "ovLegend"; $("#chart").appendChild(el); }
   const main = chartData.bars;
-  let i = main.length - 1;
-  if (param && param.time !== undefined) { const t = param.time; const k = main.findIndex((b) => b.time === t); if (k >= 0) i = k; }
+  const i = param?.dataIndex ?? main.length - 1;
   const a = ovAnchorIdx ?? 0;
   const mp = (ovVal(main[i]) / ovVal(main[Math.min(a, main.length - 1)]) - 1) * 100;
   const row = (color, name, pct) => `<div><i style="background:${color}"></i>${name} <b class="${cls(pct)}">${pct == null ? "—" : pctStr(pct)}</b></div>`;
@@ -1196,15 +1171,18 @@ document.addEventListener("click", (e) => { if (!e.target.closest("#ovl")) $("#o
 /* 日/周/月 K 线的最后一根随实时报价更新，不必整张图重载 */
 function patchLastBar() {
   if (shownKey !== kkey(state.selected, state.period)) return;
-  const qq = quotes[state.selected] || {};
-  if (iopvLine && qq.iopv) iopvLine.applyOptions({ price: qq.iopv });
-  if (!chartData || chartData.type !== "candle" || !mainSeries) return;
-  if (!["day", "week", "month"].includes(state.period)) return;
-  const q = quotes[state.selected]; if (!q || q.price == null) return;
-  const last = chartData.bars[chartData.bars.length - 1];
-  last.close = q.price; last.high = Math.max(last.high, q.price); last.low = Math.min(last.low, q.price);
-  if (state.ctype === "line") mainSeries.update({ time: last.time, value: last.close });
-  else mainSeries.update({ time: last.time, open: last.open, high: last.high, low: last.low, close: last.close });
+  if (!chart) return;
+  updateIopv();
+  if (!chartData || chartData.type !== "candle" || !["day", "week", "month"].includes(state.period)) return;
+  const price = quotes[state.selected]?.price;
+  if (!Number.isFinite(price)) return;
+  const bars = chartData.bars;
+  const last = bars.at(-1);
+  if (last.close === price) return;
+  last.close = price;
+  last.high = Math.max(last.high, price);
+  last.low = Math.min(last.low, price);
+  chart.updateData(chartBar(last, bars.at(-2)));
 }
 
 function setSeg(sel, attr, val) {
@@ -1406,7 +1384,7 @@ function applyZoom(showTip) {
   if (px !== appliedFontSize) {
     appliedFontSize = px;
     document.documentElement.style.fontSize = `${px}px`;
-    chart.applyOptions({ layout: { fontSize: Math.round(px * 0.88) } });
+    chart?.setStyles({ xAxis: { tickText: { size: Math.round(px * 0.88) } }, yAxis: { tickText: { size: Math.round(px * 0.88) } } });
   }
   if (showTip) {
     let t = $("#zoomtip"); if (!t) { t = document.createElement("div"); t.id = "zoomtip"; document.body.appendChild(t); }
@@ -1680,7 +1658,7 @@ $("#chart").addEventListener("contextmenu", (e) => {
   const rr = () => { if (chartData) renderChart(chartData, false); };
   showMenu(e.clientX, e.clientY, [
     { header: `${(quotes[s] || {}).name || displayCode(s)} · ${PNAME[state.period]}` },
-    { label: "回到最新", key: "Home", action: () => chart.timeScale().scrollToRealTime() },
+    { label: "回到最新", key: "Home", action: () => chart?.scrollToRealTime() },
     { label: "重置视图", action: () => { if (chartData) renderChart(chartData, true); } },
     { label: "叠加", sub: [
       { label: "添加标的对比…", action: () => setTimeout(() => $("#btnOverlay").click(), 0) },
@@ -1701,8 +1679,9 @@ $("#chart").addEventListener("contextmenu", (e) => {
     { label: "对数坐标", checked: !!state.logScale, action: () => { state.logScale = !state.logScale; save(); rr(); } },
     "-",
     { label: "保存截图", action: () => {
-      const cv = chart.takeScreenshot(); const a = document.createElement("a");
-      a.href = cv.toDataURL("image/png"); a.download = `${displayCode(s).replace(" ", "")}_${state.period}_${Date.now()}.png`; a.click(); } },
+      if (!chart) return;
+      const a = document.createElement("a");
+      a.href = chart.getConvertPictureUrl(true, "png", getComputedStyle($("#chart")).backgroundColor); a.download = `${displayCode(s).replace(" ", "")}_${state.period}_${Date.now()}.png`; a.click(); } },
     { label: "复制当前价", action: () => copyText(String((quotes[s] || {}).price ?? "")) },
     inList ? { label: `从「${state.group}」移除`, danger: true, action: () => { state.groups[state.group] = state.groups[state.group].filter((x) => x !== s); save(); renderTabs(); renderWatch(); } }
       : { label: `加入「${state.group}」`, action: () => { addSymbols([s]); renderTabs(); renderWatch(); toast("已加入 " + state.group); } },
@@ -1763,7 +1742,7 @@ document.addEventListener("contextmenu", (e) => {
 // F5 刷新数据而不是整页刷新
 document.addEventListener("keydown", (e) => {
   if (e.key === "F5") { e.preventDefault(); refresh(); klineCache.delete(kkey(state.selected, state.period)); loadChart(false); toast("已刷新"); }
-  if (e.key === "Home" && !e.target.closest("input, textarea")) chart.timeScale().scrollToRealTime();
+  if (e.key === "Home" && !e.target.closest("input, textarea")) chart?.scrollToRealTime();
 });
 
 /* ---------- 自选栏宽度：拖动左栏右边缘调整整栏宽度，双击恢复默认 ---------- */

@@ -5,7 +5,7 @@
 <title>交易看板</title>
 <link rel="icon" href="img/logo.svg" type="image/svg+xml">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="style.css?v=next-etf-peers">
+<link rel="stylesheet" href="style.css?v=klinechart">
 <link rel="stylesheet" href="news.css">
 <link rel="stylesheet" href="ecocal.css">
 </head>
@@ -106,7 +106,6 @@
     </section>
     <div id="chartFrame">
       <div id="chart"></div>
-      <div id="drawHint" role="status" hidden></div>
     </div>
     <div id="legend" class="muted"></div>
   </section>
@@ -245,12 +244,13 @@
     <p id="etfPeersNotes" class="muted" hidden></p>
   </div>
 </dialog>
-<script src="lightweight-charts.standalone.production.js"></script>
-<script src="chart-drawings.js?v=0.8.2"></script>
-<script src="app.js?v=next-etf-peers"></script>
+<script src="klinecharts-9.8.12.js"></script>
+<script src="main-chart.js?v=klinechart"></script>
+<script src="chart-drawings.js?v=klinechart"></script>
+<script src="app.js?v=klinechart"></script>
 <script src="group-brief.js"></script>
 <script src="etf-peers.js"></script>
-<script src="intraday-context.js"></script>
+<script src="intraday-context.js?v=klinechart"></script>
 <script src="news.js" onerror="void 0"></script>
 <script src="ecocal.js" onerror="void 0"></script>
 </body>
