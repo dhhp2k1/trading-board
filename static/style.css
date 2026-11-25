@@ -55,6 +55,7 @@ main { flex: 1; display: grid; grid-template-columns: min(var(--leftW, 27rem), 4
 .panel { background: var(--panel); min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .ph { background: var(--head); color: var(--head-text); padding: 1px 6px; font-weight: 700;
   display: flex; align-items: baseline; gap: 8px; white-space: nowrap; overflow: hidden; }
+.panel-heading { flex: none; height: 2rem; padding: 0 .65rem; align-items: center; font: 700 1rem/1.35 var(--mono); }
 .ph .pn { background: #000; color: var(--head); padding: 0 5px; }
 .ph .muted { color: var(--ph-muted); font-weight: normal; }
 #right { overflow-y: auto; }
@@ -256,10 +257,8 @@ body[data-theme="graphite"] #cName, body[data-theme="graphite"] .big { color: va
   --watch-quiet: color-mix(in srgb, var(--white) 40%, var(--muted));
   --watch-surface: color-mix(in srgb, var(--panel) 60%, var(--input));
   font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif; }
-.watch-heading { display: flex; align-items: center; justify-content: space-between; gap: .6rem;
-  padding: .64rem .85rem .57rem; border-top: 2px solid var(--head); background: var(--watch-surface);
-  color: var(--white); font-size: 1.13rem; font-weight: 650; }
-#watchCount { color: var(--watch-quiet); font-size: .85rem; font-weight: 500; white-space: nowrap; }
+.watch-heading { justify-content: space-between; }
+#watchCount { color: inherit; font-size: .85rem; font-weight: 500; white-space: nowrap; }
 #groupTabs { flex-wrap: nowrap; gap: .3rem; padding: .22rem .55rem .45rem; overflow-x: auto;
   background: var(--watch-surface); scrollbar-width: thin; }
 #groupTabs button { flex: 0 0 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

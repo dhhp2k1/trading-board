@@ -5,7 +5,7 @@
 <title>交易看板</title>
 <link rel="icon" href="img/logo.svg" type="image/svg+xml">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="style.css?v=0.8.16">
+<link rel="stylesheet" href="style.css?v=0.8.17">
 <link rel="stylesheet" href="news.css">
 <link rel="stylesheet" href="ecocal.css?v=0.8.16">
 </head>
@@ -26,7 +26,7 @@
 
 <main>
   <aside id="left" class="panel">
-    <div class="watch-heading" id="watchHeading">自选监控 <span id="watchCount"></span></div>
+    <div class="ph panel-heading watch-heading" id="watchHeading">自选监控 <span id="watchCount"></span></div>
     <div id="miniBar" class="pywebview-drag-region">
       <img src="img/logo.svg" alt="" class="pywebview-drag-region">
       <select id="miniGroup"></select>
@@ -63,7 +63,7 @@
   </aside>
 
   <section id="center" class="panel">
-    <div class="ph"><span class="pn">2</span> 图表 <span id="cName"></span><span id="cCode" class="muted"></span>
+    <div class="ph panel-heading">图表 <span id="cName"></span><span id="cCode" class="muted"></span>
       <span id="cPrice" class="big"></span><span id="cPct"></span><button id="cAdd" title="加入当前分组">＋ 加自选</button>
       <button id="etfPeersOpen" type="button" aria-haspopup="dialog" hidden>ETF 对照</button></div>
     <div class="toolbar">
@@ -110,7 +110,7 @@
   </section>
 
   <aside id="right" class="panel">
-    <div class="ph" id="quoteTitle">报价详情</div>
+    <div class="ph panel-heading">报价详情</div>
     <section id="detail" aria-labelledby="quoteTitle">
       <div id="detailQuote"></div>
       <div id="detailHistory"></div>
