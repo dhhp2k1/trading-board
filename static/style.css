@@ -440,6 +440,9 @@ body.mini #watch tr:hover .watch-name { margin-right: 0; }
 .etf-peers-content { padding: .65rem .75rem; }
 .etf-peers-controls { display: flex; gap: .6rem; align-items: center; justify-content: space-between; }
 .etf-peers-controls button { margin-left: auto; }
+#etfDecomposition { margin: 0 0 .75rem; }
+#etfDecomposition p { margin: .25rem 0; color: var(--muted); }
+#etfPeersDialog #etfDecomposition tbody th { position: static; font-weight: normal; color: var(--text); }
 .etf-peers-scroll { max-height: 55vh; overflow: auto; }
 #etfPeersDialog table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 #etfPeersDialog th, #etfPeersDialog td { padding: .3rem .45rem; text-align: right; white-space: nowrap;

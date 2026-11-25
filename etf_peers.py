@@ -6,11 +6,15 @@ from functools import lru_cache
 from pathlib import Path
 
 
+IOPV_TTL = 30
+
+
 @lru_cache(maxsize=1)
 def catalog():
     with Path(__file__).with_name("etf-indexes.json").open(encoding="utf-8") as stream:
         data = json.load(stream)
-    return {symbol: group for group in data["groups"].values() for symbol in group["funds"]}, data["asOf"]
+    return {symbol: dict(group, key=key) for key, group in data["groups"].items()
+            for symbol in group["funds"]}, data["asOf"]
 
 
 def number(value):
@@ -50,15 +54,22 @@ def matched_value(price, quote_time, estimate):
     return (price / positive(estimate[0]) - 1) * 100, estimate[1]
 
 
+def estimates_for(category, cached, http_get):
+    return cached(("etf-iopv", category), IOPV_TTL, lambda: official_iopvs(category, http_get))
+
+
 def compare(symbol, fetch_quotes, cached, http_get):
     groups, as_of = catalog()
     group = groups.get(symbol)
     if not group:
         return {"index": None, "rows": []}
     funds = group["funds"]
-    quotes = cached(("etf-peers", tuple(funds)), 5, lambda: fetch_quotes(list(funds)))
+    try:
+        quotes = cached(("etf-peers", tuple(funds)), 5, lambda: fetch_quotes(list(funds)))
+    except (OSError, ValueError, KeyError, TypeError):
+        quotes = {}
     category = "qdii" if "跨境" in group["market"] else "etf"
-    estimates = cached(("etf-iopv", category), 30, lambda: official_iopvs(category, http_get))
+    estimates = estimates_for(category, cached, http_get)
     rows = []
     for code, fallback_name in funds.items():
         quote = quotes.get(code, {})

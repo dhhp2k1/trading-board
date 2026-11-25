@@ -10,6 +10,7 @@
   const status = dialog.querySelector("#etfPeersStatus");
   const results = dialog.querySelector("#etfPeersResults");
   const notes = dialog.querySelector("#etfPeersNotes");
+  const decomposition = dialog.querySelector("#etfDecomposition");
   const body = results.querySelector("tbody");
   const sortButtons = [...results.querySelectorAll("button[data-sort]")];
   const amountFormatter = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 });
@@ -93,6 +94,56 @@
     }));
   }
 
+  function renderDecomposition(data) {
+    if (!decomposition || !data.crossBorder) return;
+    const heading = document.createElement("strong");
+    heading.textContent = "跨境 ETF 价差拆解";
+    const interval = document.createElement("p");
+    interval.textContent = data.start && data.end
+      ? `北京时间 ${data.start} 至 ${data.end.slice(-5)}`
+      : data.message || "暂无同期行情";
+    const table = document.createElement("table");
+    table.setAttribute("aria-label", heading.textContent);
+    const head = table.createTHead().insertRow();
+    for (const title of ["指标", "区间涨跌", "行情时点"]) {
+      const cell = document.createElement("th");
+      cell.scope = "col";
+      cell.textContent = title;
+      head.append(cell);
+    }
+    const metrics = table.createTBody();
+    for (const item of data.rows || []) {
+      const row = metrics.insertRow();
+      const label = document.createElement("th");
+      label.scope = "row";
+      label.textContent = item.name + (item.proxy ? "（代理）" : "");
+      const source = [item.ticker, item.source].filter(Boolean).join(" · ");
+      if (source) label.title = source;
+      row.append(label);
+      const value = row.insertCell();
+      value.textContent = Number.isFinite(item.pct) ? percentText(item.pct) : "暂无";
+      value.className = item.pct > 0 ? "up" : item.pct < 0 ? "down" : "";
+      row.insertCell().textContent = item.time?.slice(-5) || item.status || "";
+    }
+    decomposition.replaceChildren(heading, interval, table);
+    decomposition.hidden = false;
+  }
+
+  async function loadDecomposition(symbol, controller) {
+    if (!decomposition) return;
+    decomposition.hidden = true;
+    decomposition.replaceChildren();
+    try {
+      const response = await fetch("/api/etf-decomposition?s=" + encodeURIComponent(symbol),
+        { signal: controller.signal });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (request === controller && dialog.open) renderDecomposition(data);
+    } catch {
+      // The peer table is loaded independently.
+    }
+  }
+
   async function loadPeers() {
     request?.abort();
     const controller = new AbortController();
@@ -100,6 +151,7 @@
     reload.disabled = true;
     index.hidden = results.hidden = notes.hidden = true;
     status.textContent = "正在读取 ETF 报价…";
+    loadDecomposition(anchor, controller);
     try {
       const response = await fetch("/api/etf-peers?s=" + encodeURIComponent(anchor), { signal: controller.signal });
       if (!response.ok) throw new Error("ETF peers unavailable");

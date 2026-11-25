@@ -68,6 +68,7 @@
 .ec-r:hover td { background: var(--hl); }
 .ec-r.link { cursor: pointer; }
 .ec-t { color: var(--text); }
+#ecocal .ec-chart { height: auto; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
 .ec-reg { color: var(--muted); }
 .ec-reg.r-CN { color: #ff6b5b; } .ec-reg.r-US { color: var(--blue); } .ec-reg.r-EU { color: #c8a2ff; }
 .ec-reg.r-JP { color: #ff9ecb; } .ec-reg.r-GB { color: #7fd3ff; } .ec-reg.r-HK { color: #ffcf5b; }

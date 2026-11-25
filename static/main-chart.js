@@ -60,6 +60,46 @@ function createMainChart(host) {
   return chart;
 }
 
+let chartEventRegistered = false;
+function registerChartEvent() {
+  if (chartEventRegistered) return;
+  window.klinecharts.registerOverlay({
+    name: "boardEvent",
+    totalStep: 2,
+    needDefaultPointFigure: false,
+    createPointFigures: ({ coordinates: [point], bounding, overlay }) => {
+      if (!point || point.x < 0 || point.x > bounding.width) return [];
+      const align = point.x > bounding.width / 2 ? "right" : "left";
+      return [
+        { type: "line", ignoreEvent: true, attrs: { coordinates: [{ x: point.x, y: 0 }, { x: point.x, y: bounding.height }] } },
+        { type: "text", ignoreEvent: true, attrs: {
+          x: point.x + (align === "left" ? 5 : -5), y: 6, align, baseline: "top", text: overlay.extendData,
+        } },
+      ];
+    },
+  });
+  chartEventRegistered = true;
+}
+
+const EVENT_OVERLAY_ID = "boardSelectedEvent";
+function showChartEvent(chart, index, label) {
+  registerChartEvent();
+  const bar = chart.getDataList()[index];
+  chart.removeOverlay({ id: EVENT_OVERLAY_ID });
+  chart.createOverlay({
+    id: EVENT_OVERLAY_ID, name: "boardEvent", lock: true,
+    points: [{ timestamp: bar.timestamp, value: bar.close }],
+    extendData: label,
+    styles: {
+      line: { color: "#4fa3ff", size: 1, style: "dashed", dashedValue: [4, 3] },
+      text: { color: "#4fa3ff", backgroundColor: "#121a24" },
+    },
+  }, PRICE_PANE);
+  const width = chart.getSize(PRICE_PANE, "main").width;
+  const x = chart.convertToPixel({ dataIndex: index }, { paneId: PRICE_PANE }).x;
+  if (Number.isFinite(x) && width > 0) chart.scrollByDistance(width / 2 - x);
+}
+
 const chartLineNames = new Set();
 function setChartLine(chart, name, data, color, size = 1) {
   const points = new Map(data.map(({ time, value }) => [chartTimestamp(time), value]));

@@ -135,8 +135,11 @@
       const bz = bodyZh.get(i.id);
       const trBtn = body && isEnglish(body) && !bz
         ? `<button class="nw-trb" data-act="trbody" ${bodyBusy.has(i.id) ? "disabled" : ""}>${bodyBusy.has(i.id) ? "翻译中…" : "翻译正文"}</button>` : "";
+      const time = i.time && window.board?.showEventOnChart
+        ? `<button type="button" class="nw-t" data-act="chart" title="定位到 1 分钟图">${fmtTime(i.time)}</button>`
+        : `<span class="nw-t">${fmtTime(i.time)}</span>`;
       return `<div class="${cls}" data-id="${esc(i.id)}">
-        <span class="nw-t">${fmtTime(i.time)}</span><span class="nw-s s-${esc(i.src)}" title="${esc(i.srcName + (i.also ? "，另见 " + i.also.join("、") : ""))}">${esc(SRC_CODE[i.src] || i.srcName)}${i.also ? `<i class="nw-also">+${i.also.length}</i>` : ""}</span>
+        ${time}<span class="nw-s s-${esc(i.src)}" title="${esc(i.srcName + (i.also ? "，另见 " + i.also.join("、") : ""))}">${esc(SRC_CODE[i.src] || i.srcName)}${i.also ? `<i class="nw-also">+${i.also.length}</i>` : ""}</span>
         <div class="nw-c"><div class="nw-h">${mark(head)}</div>${zh ? `<div class="nw-o" title="${esc(orig)}">${esc(orig)}</div>` : ""}${bz ? `<div class="nw-b nw-bz">${mark(bz)}</div>` : ""}${body ? `<div class="nw-b">${mark(body)}</div>` : ""}
         <div class="nw-acts">${i.url ? `<a class="nw-a" href="${esc(i.url)}" target="_blank" rel="noopener">原文 ↗</a>` : ""}${trBtn}</div></div>
       </div>`;
@@ -257,6 +260,14 @@
     if (t.dataset.act === "tr") { prefs.tr = !prefs.tr; savePrefs(); renderAll(); if (prefs.tr) loadFlash(); return; }
     if (t.dataset.act === "hot") { prefs.hotOnly = !prefs.hotOnly; savePrefs(); renderAll(); return; }
     if (t.dataset.act === "wide") { prefs.wide = !prefs.wide; savePrefs(); renderBar(); return; }
+    if (t.dataset.act === "chart") {
+      const id = t.closest(".nw-item").dataset.id;
+      const item = (prefs.tab === "flash" ? flash : stock).find((i) => i.id === id);
+      if (item) window.board?.showEventOnChart?.({
+        timestamp: item.time, title: (prefs.tr && item.titleZh) || item.title || item.text, kind: "新闻",
+      });
+      return;
+    }
     if (t.dataset.act === "trbody") { translateBody(t.closest(".nw-item").dataset.id); return; }
     if (t.classList.contains("nw-item")) {
       const id = t.dataset.id;

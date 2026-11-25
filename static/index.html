@@ -5,9 +5,9 @@
 <title>交易看板</title>
 <link rel="icon" href="img/logo.svg" type="image/svg+xml">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="style.css?v=0.8.17">
-<link rel="stylesheet" href="news.css">
-<link rel="stylesheet" href="ecocal.css?v=0.8.16">
+<link rel="stylesheet" href="style.css?v=0.8.18">
+<link rel="stylesheet" href="news.css?v=0.8.18">
+<link rel="stylesheet" href="ecocal.css?v=0.8.18">
 </head>
 <body>
 <div id="topbar">
@@ -226,6 +226,7 @@
       <button id="etfPeersReload" type="button">刷新报价</button>
     </div>
     <p id="etfPeersStatus" role="status"></p>
+    <section id="etfDecomposition" aria-label="跨境 ETF 价差拆解" hidden></section>
     <div class="etf-peers-scroll" id="etfPeersResults" hidden>
       <table aria-label="同指数 ETF 报价">
         <thead><tr>
@@ -244,13 +245,13 @@
   </div>
 </dialog>
 <script src="klinecharts-9.8.12.js"></script>
-<script src="main-chart.js?v=klinechart"></script>
+<script src="main-chart.js?v=0.8.18"></script>
 <script src="chart-drawings.js?v=klinechart"></script>
-<script src="app.js?v=0.8.16"></script>
+<script src="app.js?v=0.8.18"></script>
 <script src="group-brief.js"></script>
-<script src="etf-peers.js"></script>
+<script src="etf-peers.js?v=0.8.18"></script>
 <script src="intraday-context.js?v=klinechart"></script>
-<script src="news.js" onerror="void 0"></script>
-<script src="ecocal.js" onerror="void 0"></script>
+<script src="news.js?v=0.8.18" onerror="void 0"></script>
+<script src="ecocal.js?v=0.8.18" onerror="void 0"></script>
 </body>
 </html>

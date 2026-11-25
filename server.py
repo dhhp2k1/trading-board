@@ -22,9 +22,9 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 版本戳：每次发版改这里。顶栏会显示，桌面启动器也用它判断后台跑的是不是旧版本
-VERSION = "0.8.17"
+VERSION = "0.8.18"
 CHANNEL = "next"
-BUILD = "2026-11-25 13:28"
+BUILD = "2026-11-25 15:27"
 
 PORT = int(os.environ.get("BOARD_PORT", "8765"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -253,6 +253,20 @@ def em_hk_quotes(codes):
     return out
 
 
+_etf_iopv_refresh = None
+
+
+def quote_iopv_estimates(provider):
+    global _etf_iopv_refresh
+    with _cache_lock:
+        hit = _cache.get(("etf-iopv", "qdii"))
+        if hit and time.time() - hit[0] < provider.IOPV_TTL:
+            return hit[1]
+        if _etf_iopv_refresh is None or _etf_iopv_refresh.done():
+            _etf_iopv_refresh = POOL.submit(provider.estimates_for, "qdii", cached, http_get)
+    return {}
+
+
 def get_quotes(symbols):
     tc = [s for s in symbols if not s.startswith("yf:")]
     yf = [s[3:] for s in symbols if s.startswith("yf:")]
@@ -275,6 +289,25 @@ def get_quotes(symbols):
             out["yf:" + s] = f.result()
         except Exception as e:  # noqa: BLE001
             out["yf:" + s] = {"symbol": "yf:" + s, "name": s, "error": str(e)}
+    if any(q.get("fundType") == "ETF" for q in out.values()):
+        try:
+            import etf_peers
+            groups, _ = etf_peers.catalog()
+            foreign = [(s, q) for s, q in out.items()
+                       if "跨境" in groups.get(s, {}).get("market", "") and q.get("fundType") == "ETF"]
+            if foreign:
+                for _, q in foreign:
+                    q.pop("premium", None)
+                    q.pop("iopv", None)
+                estimates = quote_iopv_estimates(etf_peers)
+                for s, q in foreign:
+                    estimate = estimates.get(s[2:])
+                    premium, valuation_time = etf_peers.matched_value(
+                        etf_peers.positive(q.get("price")), q.get("time") if q.get("timestamp") else None, estimate)
+                    if valuation_time:
+                        q.update(premium=premium, iopv=etf_peers.positive(estimate[0]), valuationTime=valuation_time)
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            print("跨境 ETF 参考净值不可用:", e, file=sys.stderr)
     return out
 
 
@@ -359,12 +392,13 @@ def em_kline(symbol, period, end=None):
                 o, c, h, lo = (fnum(x) for x in f[1:5])
                 if not c or not math.isfinite(c) or c <= 0:  # 跳过开盘前的占位记录
                     continue
+                observed_open = o if o and math.isfinite(o) and o > 0 else None
                 if not o or not math.isfinite(o) or o <= 0:
                     o = bars[-1]["close"] if bars and market_day(bars[-1]["time"]) == f[0][:10] else c
                 h = max(x for x in (h, o, c) if x is not None and math.isfinite(x))
                 lo = min(x for x in (lo, o, c) if x is not None and math.isfinite(x) and x > 0)
                 bars.append({"time": bj_ts(f[0]), "value": c, "open": o, "high": h, "low": lo, "close": c,
-                             "volume": fnum(f[5]) or 0, "avg": fnum(f[7])})
+                             "volume": fnum(f[5]) or 0, "avg": fnum(f[7]), "observedOpen": observed_open})
             if not bars:
                 continue
             return {"type": "line" if period == "min" else "candle", "bars": bars,
@@ -746,6 +780,10 @@ class Handler(SimpleHTTPRequestHandler):
                 import etf_peers
                 symbol = qs.get("s", [""])[0]
                 return self.send_json(etf_peers.compare(symbol, tencent_quotes, cached, http_get))
+            if u.path == "/api/etf-decomposition":
+                import etf_decomposition
+                symbol = qs.get("s", [""])[0]
+                return self.send_json(etf_decomposition.compare(symbol, cached, tencent_kline, em_kline, yahoo_chart))
             if u.path == "/api/group-reference":
                 symbol = qs.get("s", [""])[0]
                 day = qs.get("day", [""])[0]

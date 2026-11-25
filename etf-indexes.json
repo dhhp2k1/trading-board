@@ -4037,6 +4037,46 @@
     "sh589550": "科创价值ETF华夏"
    }
   },
+  "HSTECH": {
+   "index": "恒生科技指数",
+   "market": "跨境 · 香港",
+   "funds": {
+    "sh513130": "恒生科技ETF华泰柏瑞",
+    "sh513180": "恒生科技ETF华夏",
+    "sh513010": "恒生科技ETF易方达",
+    "sz159742": "恒生科技ETF博时"
+   }
+  },
+  "N225": {
+   "index": "日经225指数",
+   "market": "跨境 · 日本",
+   "funds": {
+    "sh513000": "日经225ETF易方达",
+    "sh513520": "日经225ETF华夏",
+    "sh513880": "日经225ETF华安"
+   }
+  },
+  "TOPIX": {
+   "index": "东证指数",
+   "market": "跨境 · 日本",
+   "funds": {
+    "sh513800": "东证ETF南方"
+   }
+  },
+  "DAX": {
+   "index": "德国DAX指数",
+   "market": "跨境 · 德国",
+   "funds": {
+    "sh513030": "德国ETF华安"
+   }
+  },
+  "CAC40": {
+   "index": "法国CAC40指数",
+   "market": "跨境 · 法国",
+   "funds": {
+    "sh513080": "法国ETF华安"
+   }
+  },
   "SPX": {
    "index": "标准普尔500指数",
    "market": "跨境 · 美国",
@@ -4080,6 +4120,7 @@
   }
  },
  "sources": [
+  "https://english.sse.com.cn/access/etf/",
   "https://fund.eastmoney.com/data/jcxx_zhishu.html",
   "https://quote.eastmoney.com/center/gridlist.html#fund_etf",
   "https://fundf10.eastmoney.com/jbgk_{code}.html",

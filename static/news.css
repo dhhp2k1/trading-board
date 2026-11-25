@@ -48,6 +48,7 @@
 .nw-item { display: grid; grid-template-columns: 3.2rem 3.4rem 1fr; gap: 0 4px; padding: 3px 5px; border-bottom: 1px solid #120f0a; cursor: pointer; }
 .nw-item:hover { background: var(--hl, #1a1408); }
 .nw-t { color: var(--nw-amber); font-variant-numeric: tabular-nums; }
+#news button.nw-t { align-self: start; height: auto; padding: 0; line-height: inherit; text-align: left; text-decoration: underline dotted; text-underline-offset: 2px; }
 .nw-s { color: var(--nw-muted); font-size: 0.8rem; padding-top: 1px; overflow: hidden; }
 .nw-s.s-wscn { color: #c9a35a; } .nw-s.s-sina { color: #d98a5a; } .nw-s.s-mw { color: var(--nw-blue); }
 .nw-s.s-yahoo { color: #b48cff; }

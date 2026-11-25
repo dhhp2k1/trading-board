@@ -809,6 +809,52 @@ function fetchKline(s, p) {
 
 let shownKey = null;   // 图上当前显示的是哪个 标的|周期
 let chartReq = 0;
+let eventChartRequest = 0;
+
+function clearChartEvent() {
+  eventChartRequest++;
+  chart?.removeOverlay({ id: EVENT_OVERLAY_ID });
+}
+
+async function showEventOnChart({ timestamp, title, kind, symbol = state.selected }) {
+  if (MINI || !chart || !symbol || !Number.isFinite(timestamp) || timestamp <= 0) return false;
+  const request = ++eventChartRequest;
+  if (timestamp * 1000 > Date.now()) { toast("事件尚未发生"); return false; }
+  const period = "m1";
+  const key = kkey(symbol, period);
+  // Intraday data uses Beijing wall-clock time encoded as UTC.
+  const minute = Math.floor(timestamp / 60) * 60 + 8 * 3600;
+  const hasMinute = (data) => data?.bars?.some(({ time }) => time === minute);
+  let data = klineCache.get(key)?.d;
+  try {
+    if (!hasMinute(data)) data = await fetchKline(symbol, period);
+    if (request !== eventChartRequest) return false;
+    const first = data?.bars?.[0]?.time;
+    if (!hasMinute(data) && Number.isFinite(first) && minute < first) {
+      const before = Math.min(first, minute + 86400);
+      const response = await fetch(`/api/kline?s=${encodeURIComponent(symbol)}&p=${period}&before=${before}`);
+      const history = await response.json();
+      if (hasMinute(history)) data = { ...data, bars: history.bars.concat(data.bars) };
+    }
+  } catch {
+    if (request === eventChartRequest) toast("分钟行情加载失败");
+    return false;
+  }
+  if (request !== eventChartRequest) return false;
+  if (!hasMinute(data)) { toast("该时刻无 1 分钟行情"); return false; }
+
+  klineCache.set(key, { d: data, at: Date.now() });
+  state.period = period;
+  setSeg("#periods", "p", period);
+  select(symbol, true);
+  const index = chart.getDataList().findIndex(({ timestamp: time }) => time === minute * 1000);
+  if (index < 0) return false;
+  const timeLabel = new Date(minute * 1000).toISOString().slice(5, 16).replace("T", " ");
+  const chars = Array.from(title || "");
+  const heading = chars.length > 24 ? chars.slice(0, 24).join("") + "…" : chars.join("");
+  showChartEvent(chart, index, [kind, timeLabel, heading].filter(Boolean).join(" "));
+  return true;
+}
 
 /* 画图：fit=true 时按新数据重新定位视野；fit=false 时保留当前视野（只用于同一标的同一周期的刷新） */
 function renderChart(d, fit, key = shownKey) {
@@ -1189,7 +1235,7 @@ function setSeg(sel, attr, val) {
   document.querySelectorAll(sel + " button").forEach((x) => x.classList.toggle("on", x.dataset[attr] === val));
 }
 document.querySelectorAll("#periods button").forEach((b) => {
-  b.onclick = () => { state.period = b.dataset.p; save(); setSeg("#periods", "p", state.period); loadChart(true); };
+  b.onclick = () => { clearChartEvent(); state.period = b.dataset.p; save(); setSeg("#periods", "p", state.period); loadChart(true); };
 });
 // 切换图形不重新拉数据，直接用当前数据重画，保留视野
 document.querySelectorAll("#ctypes button").forEach((b) => {
@@ -1216,7 +1262,8 @@ function renderClocks() {
 setInterval(renderClocks, 1000); renderClocks();
 
 /* ---------- 选中 / 详情 ---------- */
-function select(s) {
+function select(s, fromEvent = false) {
+  if (!fromEvent) clearChartEvent();
   state.selected = s; save();
   renderWatch(); renderDetail(); renderOvChips(); loadChart(true);
   if (!quotes[s]) refresh();
@@ -1228,6 +1275,7 @@ window.board = {
   get selected() { return state.selected; },
   quote: (s) => quotes[s || state.selected],
   select,
+  showEventOnChart,
   displayCode,
 };
 const QUOTE_PERIODS = [["1D", "近 1 个交易日"], ["1W", "近 1 周"], ["1M", "近 1 个月"],

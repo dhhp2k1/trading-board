@@ -200,9 +200,12 @@
       const cd = e.ts ? (e.ts > now ? countdown(e.ts - now) : e.actual ? "已公布" : now - e.ts < 1800 ? "刚刚" : "") : "";
       const reg = e.custom ? "我的" : (REG[e.region] || e.region);
       const tag = e.type === "data" || e.type === "event" ? "" : `<span class="ec-tag t-${e.type}">${TYPES[e.type]}</span>`;
+      const time = tm ? `${pad(tm.getHours())}:${pad(tm.getMinutes())}` : "全天";
+      const timeCell = tm && e.ts <= now && !e.allDay && window.board?.showEventOnChart
+        ? `<button type="button" class="ec-chart" title="定位到 1 分钟图">${time}</button>` : time;
       const cls = ["ec-r", `imp${e.imp}`, past ? "past" : "", soon ? "soon" : "", e.id === nextId ? "next" : "", e.sym ? "link" : ""].join(" ");
       html += `<tr class="${cls}" data-id="${esc(e.id)}"${e.sym ? ` data-sym="${esc(e.sym)}"` : ""} title="${esc((e.titleEn ? e.titleEn + " · " : "") + "来源：" + e.src)}">
-        <td class="ec-t">${e.id === nextId ? "▶" : ""}${tm ? `${pad(tm.getHours())}:${pad(tm.getMinutes())}` : "全天"}</td>
+        <td class="ec-t">${e.id === nextId ? "▶" : ""}${timeCell}</td>
         <td class="ec-reg r-${e.region}">${esc(reg)}</td>
         <td class="ec-imp">${"★".repeat(e.imp)}<span>${"★".repeat(3 - e.imp)}</span></td>
         <td class="ec-ti">${tag}${esc(e.title)}${e.mine ? ` <span class="ec-tag t-mine">自选</span>` : ""}${e.custom ? ` <a class="ec-del" data-del="${esc(e.id)}" title="删除">✕</a>` : ""}</td>
@@ -264,9 +267,17 @@
     const row = $(`#ecd-${s}`, box);
     if (row) row.scrollIntoView({ block: "start", behavior: "smooth" });
   };
-  $("#ecBody", box).onclick = (ev) => {
+  $("#ecBody", box).onclick = async (ev) => {
     const del = ev.target.closest("[data-del]");
     if (del) { st.custom = st.custom.filter((c) => c.id !== del.dataset.del); save(); render(); renderNext(); return; }
+    const time = ev.target.closest(".ec-chart");
+    if (time) {
+      const item = allEvents().find((e) => e.id === time.closest("tr").dataset.id);
+      if (item && await window.board?.showEventOnChart?.({
+        timestamp: item.ts, title: item.title, kind: "日历", symbol: item.sym || undefined,
+      })) show(false);
+      return;
+    }
     const tr = ev.target.closest("tr[data-sym]");
     if (tr && window.board && window.board.select) { window.board.select(tr.dataset.sym); show(false); }
   };
