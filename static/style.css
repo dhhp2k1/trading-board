@@ -26,9 +26,7 @@ code { background: #1a1408; padding: 0 4px; }
 
 /* 顶栏：命令行 + 世界时钟 */
 #topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 4px 8px; background: #000; border-bottom: 1px solid var(--line); }
-.logo { color: var(--head); font-weight: 700; letter-spacing: 1px; }
-.logo b { color: #000; background: var(--head); padding: 0 4px; margin-left: 2px; }
-.cmd { position: relative; flex: 1 1 14rem; min-width: 0; display: flex; align-items: center; max-width: 640px;
+.cmd { position: relative; flex: 1 1 14rem; min-width: 0; display: flex; align-items: center; max-width: 22rem;
   border: 1px solid var(--border2); background: var(--input); }
 .cmd .prompt { color: var(--head); padding: 0 6px; }
 .cmd input { flex: 1; min-width: 0; border: none; background: transparent; color: var(--white); padding: 3px 0; }
@@ -403,8 +401,6 @@ body.wl-heat #watchScroll { display: none; }
 #lookPop label { display: block; padding: 2px 0; cursor: pointer; }
 
 /* ===== Logo ===== */
-.logo { display: inline-flex; align-items: center; gap: 2px; }
-.logo img { width: 1.35rem; height: 1.35rem; margin-right: 5px; }
 .minibtn { padding: 0 8px; white-space: nowrap; }
 
 /* ===== 桌面小窗 ===== */

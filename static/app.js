@@ -1207,7 +1207,7 @@ setInterval(() => {
 }, 2000);
 
 /* ---------- 世界时钟 ---------- */
-const CLOCKS = [["北京", "Asia/Shanghai"], ["东京", "Asia/Tokyo"], ["伦敦", "Europe/London"], ["纽约", "America/New_York"]];
+const CLOCKS = [["北京", "Asia/Shanghai"], ["纽约", "America/New_York"]];
 function renderClocks() {
   const now = new Date();
   $("#clocks").innerHTML = CLOCKS.map(([n, tz]) =>
@@ -1430,7 +1430,7 @@ $("#ver").onclick = openUpdates;
 fetch("/api/version").then((r) => r.json()).then((v) => {
   curVersion = v.version;
   installedChannel = v.channel || "main";
-  $("#ver").textContent = `v${v.version} · ${installedChannel} · ${v.build}`;
+  $("#ver").textContent = `v${v.version}`;
   $("#ver").title = `服务端版本 ${v.version}，构建于 ${v.build}（进程 ${v.pid}）`;
   setTimeout(() => checkUpdate(false), 3000);
 }).catch(() => { $("#ver").textContent = "版本未知（旧服务端）"; $("#ver").classList.add("down"); });

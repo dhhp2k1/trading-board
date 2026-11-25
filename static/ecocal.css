@@ -1,6 +1,6 @@
 /* 投资日历：彭博 ECO 风格。只作用于 #ecocal / #ecoBtn / #ecoNext。 */
 #ecoBtn.on { background: var(--head); color: #000; }
-#ecoNext { cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30rem; min-width: 0;
+#ecoNext { cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 2 1 18rem; min-width: 0;
   color: var(--white); font-size: 0.92rem; padding: 1px 6px; border: 1px solid var(--border2); }
 #ecoNext b { color: var(--head); font-weight: normal; }
 #ecoNext i { font-style: normal; color: var(--muted); margin-left: 4px; }
@@ -99,5 +99,4 @@
 #ecSrc .ok { color: #26d07c; } #ecSrc .bad { color: var(--up); }
 
 body.mini #ecocal, body.mini #ecoNext { display: none !important; }
-@media (max-width: 1250px) { #ecoNext { max-width: 18rem; } }
 @media (max-width: 1000px) { #ecoNext { display: none; } }

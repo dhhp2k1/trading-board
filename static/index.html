@@ -5,19 +5,18 @@
 <title>交易看板</title>
 <link rel="icon" href="img/logo.svg" type="image/svg+xml">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="style.css?v=klinechart">
+<link rel="stylesheet" href="style.css?v=0.8.15.1">
 <link rel="stylesheet" href="news.css">
-<link rel="stylesheet" href="ecocal.css">
+<link rel="stylesheet" href="ecocal.css?v=0.8.15.1">
 </head>
 <body>
 <div id="topbar">
-  <span class="logo"><img src="img/logo.svg" alt="">TB<b>TERMINAL</b></span>
   <button id="btnMini" class="minibtn" title="切换成置顶的迷你自选小窗（可随时切回）">▣ 小窗</button>
   <span id="ver" class="ver" title="版本"></span>
   <button id="updBtn" class="upd" style="display:none" onclick="doUpdate()"></button>
   <div class="cmd">
     <span class="prompt">&gt;</span>
-    <input id="addInput" placeholder="输入代码或名称：600519 / 00700 / AAPL / ^N225，回车查看" autocomplete="off" spellcheck="false">
+    <input id="addInput" placeholder="代码或名称" autocomplete="off" spellcheck="false">
     <span class="go">GO</span>
     <div id="suggest"></div>
   </div>
@@ -247,7 +246,7 @@
 <script src="klinecharts-9.8.12.js"></script>
 <script src="main-chart.js?v=klinechart"></script>
 <script src="chart-drawings.js?v=klinechart"></script>
-<script src="app.js?v=klinechart"></script>
+<script src="app.js?v=0.8.15"></script>
 <script src="group-brief.js"></script>
 <script src="etf-peers.js"></script>
 <script src="intraday-context.js?v=klinechart"></script>
