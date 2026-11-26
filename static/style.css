@@ -465,3 +465,20 @@ body.mini #watch tr:hover .watch-name { margin-right: 0; }
 #intradayContext select, #intradayContext button { font-size: inherit; }
 #industryBlock:not([hidden]) { margin-bottom: 3px; }
 #intradayContext button[aria-pressed="true"] { color: #68c9ff; }
+
+/* 辅助标注（全周期 3 条中文价位线 + 顶部日线趋势徽章） */
+.trend-badge { margin-left: auto; padding: 0 7px; font-size: .85rem; font-weight: 700;
+  background: rgba(0, 0, 0, .78); border: 1px solid rgba(255, 255, 255, .18); white-space: nowrap; }
+.trend-badge.strong { color: var(--up); border-color: color-mix(in srgb, var(--up) 55%, transparent); }
+.trend-badge.weak { color: var(--down); border-color: color-mix(in srgb, var(--down) 55%, transparent); }
+.trend-badge.range { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+body[data-theme="graphite"] .trend-badge { background: var(--input); }
+.guide-ctl { display: flex; }
+#btnGuide { padding: 1px 8px; white-space: nowrap; }
+#btnGuide[aria-pressed="true"] { background: var(--head); color: #000; }
+body[data-theme="graphite"] #btnGuide[aria-pressed="true"] { color: #fff; }
+.guide-legend { margin-left: 8px; }
+.guide-hi { color: #ff7875; }
+.guide-cost { color: #ffd400; }
+.guide-lo { color: #4fa3ff; }
+.guide-hot { margin-left: 4px; padding: 0 3px; background: rgba(255, 176, 0, .18); color: var(--accent); }

@@ -121,11 +121,13 @@ function setPriceReference(chart, id, title, price, color, dashedValue) {
     return;
   }
   const points = [{ value: price }];
+  const styles = { line: { color, size: 1, style: "dashed", dashedValue }, text: { color, backgroundColor: "transparent" } };
   const existing = chart.getOverlayById(id);
   if (existing) {
-    if (existing.points[0]?.value !== price) chart.overrideOverlay({ id, points });
+    if (existing.points[0]?.value !== price || existing.extendData !== title || existing.styles?.line?.color !== color) {
+      chart.overrideOverlay({ id, points, extendData: title, styles });
+    }
   } else chart.createOverlay({
-    id, name: "boardReference", lock: true, points, extendData: title,
-    styles: { line: { color, size: 1, style: "dashed", dashedValue }, text: { color, backgroundColor: "transparent" } },
+    id, name: "boardReference", lock: true, points, extendData: title, styles,
   }, PRICE_PANE);
 }

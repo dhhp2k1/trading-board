@@ -895,13 +895,14 @@ function renderChart(d, fit, key = shownKey) {
       yAxis: { type: state.logScale ? "log" : "normal" },
     });
     chart.applyNewData(bars, false);
+    const guideOn = Boolean(window.chartGuide?.active?.());
     const hasMa = chart.getIndicatorByPaneId(PRICE_PANE, "MA");
-    if (!intraday && state.showMA !== false && !hasMa) {
+    if (!intraday && state.showMA !== false && !guideOn && !hasMa) {
       chart.createIndicator({
         name: "MA", calcParams: MA_DEF.map(([n]) => n),
         styles: { lines: MA_DEF.map(([, color]) => indicatorLineStyle(color)) },
       }, true, { id: PRICE_PANE });
-    } else if ((intraday || state.showMA === false) && hasMa) chart.removeIndicator(PRICE_PANE, "MA");
+    } else if ((intraday || state.showMA === false || guideOn) && hasMa) chart.removeIndicator(PRICE_PANE, "MA");
     if (intraday && d.bars.some(b => b.avg)) {
       setChartLine(chart, "BoardAverage", d.bars.map(b => ({ time: b.time, value: b.avg || undefined })), "#ffd400");
     } else chart.removeIndicator(PRICE_PANE, "BoardAverage");
@@ -1014,14 +1015,17 @@ function showLegend(param) {
   const full = d.bars[param?.dataIndex] || d.bars.at(-1);
   const tag = `<b style="color:#ff8c00">${PNAME[state.period]}</b> <span class="muted">· ${d.source || ""}</span>`;
   const tstr = typeof full.time === "number" ? new Date(full.time * 1000).toISOString().slice(5, 16).replace("T", " ") : full.time;
+  const guideOn = Boolean(window.chartGuide?.active?.());
+  const guideHtml = guideOn ? (window.chartGuide.legendHtml?.() || "") : "";
   if (d.type === "line") {
     $("#legend").innerHTML = `${tag}  ${tstr}  价 <b style="color:#e8e8e8">${fmt(full.value)}</b>` +
-      (full.avg ? `  均 <b style="color:#ffd400">${fmt(full.avg)}</b>` : "") + `  量 ${fmt(full.volume, 0)}`;
+      (full.avg ? `  均 <b style="color:#ffd400">${fmt(full.avg)}</b>` : "") + `  量 ${fmt(full.volume, 0)}` + guideHtml;
     return;
   }
   const k = full.close >= full.open ? "up" : "down";
+  const maHtml = guideOn || state.showMA === false ? "" : MA_DEF.map(([n, color]) => `<b style="color:${color}">MA${n}</b>`).join(" ");
   $("#legend").innerHTML = `${tag}  ${tstr}  开 <b class="${k}">${fmt(full.open)}</b> 高 <b class="${k}">${fmt(full.high)}</b> 低 <b class="${k}">${fmt(full.low)}</b> 收 <b class="${k}">${fmt(full.close)}</b>  量 ${fmt(full.volume, 0)}  ` +
-    (state.showMA === false ? [] : MA_DEF).map(([n, color]) => `<b style="color:${color}">MA${n}</b>`).join(" ");
+    (guideHtml || maHtml);
 }
 chart?.subscribeAction("onCrosshairChange", (p) => { showLegend(p); ovLegend(p); });
 $("#chart").addEventListener("mouseleave", () => { showLegend(null); ovLegend(null); });
@@ -1229,6 +1233,7 @@ function patchLastBar() {
   last.high = Math.max(last.high, price);
   last.low = Math.min(last.low, price);
   chart.updateData(chartBar(last, bars.at(-2)));
+  window.dispatchEvent(new Event("board:bar-patch"));
 }
 
 function setSeg(sel, attr, val) {
@@ -1721,6 +1726,7 @@ $("#chart").addEventListener("contextmenu", (e) => {
       action: () => { state.period = p; save(); setSeg("#periods", "p", p); loadChart(true); } })) },
     { label: "图形", sub: [["candle", "蜡烛"], ["hollow", "空心蜡烛"], ["bar", "美国线"], ["line", "折线"]].map(([t, n]) => ({ label: n, checked: state.ctype === t,
       action: () => { state.ctype = t; save(); setSeg("#ctypes", "t", t); rr(); } })) },
+    ...(window.chartGuide ? [{ label: "辅助价位线", checked: window.chartGuide.active(), action: () => window.chartGuide.toggle() }] : []),
     { label: "显示均线", checked: state.showMA !== false, action: () => { state.showMA = state.showMA === false; save(); rr(); } },
     { label: "显示成交量", checked: state.showVol !== false, action: () => { state.showVol = state.showVol === false; save(); rr(); } },
     { label: "显示 IOPV 线（ETF）", checked: state.showIopv !== false, action: () => { state.showIopv = state.showIopv === false; save(); rr(); } },

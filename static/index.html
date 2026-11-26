@@ -5,7 +5,7 @@
 <title>交易看板</title>
 <link rel="icon" href="img/logo.svg" type="image/svg+xml">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="style.css?v=0.8.18">
+<link rel="stylesheet" href="style.css?v=0.8.20">
 <link rel="stylesheet" href="news.css?v=0.8.18">
 <link rel="stylesheet" href="ecocal.css?v=0.8.18">
 </head>
@@ -65,7 +65,8 @@
   <section id="center" class="panel">
     <div class="ph panel-heading">图表 <span id="cName"></span><span id="cCode" class="muted"></span>
       <span id="cPrice" class="big"></span><span id="cPct"></span><button id="cAdd" title="加入当前分组">＋ 加自选</button>
-      <button id="etfPeersOpen" type="button" aria-haspopup="dialog" hidden>ETF 对照</button></div>
+      <button id="etfPeersOpen" type="button" aria-haspopup="dialog" hidden>ETF 对照</button>
+      <span id="trendBadge" class="trend-badge" hidden></span></div>
     <div class="toolbar">
       <div class="seg" id="periods">
         <button data-p="min">分时</button>
@@ -97,6 +98,7 @@
         <button data-draw="horizontal" aria-pressed="false" title="点击价格绘制水平线" disabled>水平线</button>
         <button id="drawUndo" title="撤销当前图表的最后一条线" disabled>撤销划线</button>
       </div>
+      <div class="guide-ctl" id="guideCtl"><button id="btnGuide" type="button" aria-pressed="false" title="显示 3 条中文价位线与日线趋势（右键自定义子项）">辅助</button></div>
     </div>
     <section id="intradayContext" aria-label="盘中相对走势" hidden>
       <div id="industryBlock" hidden><strong id="industryName"></strong> <span id="industryStats"></span>
@@ -245,12 +247,13 @@
   </div>
 </dialog>
 <script src="klinecharts-9.8.12.js"></script>
-<script src="main-chart.js?v=0.8.18"></script>
+<script src="main-chart.js?v=0.8.20"></script>
 <script src="chart-drawings.js?v=klinechart"></script>
-<script src="app.js?v=0.8.18"></script>
+<script src="app.js?v=0.8.20"></script>
 <script src="group-brief.js"></script>
 <script src="etf-peers.js?v=0.8.19"></script>
 <script src="intraday-context.js?v=klinechart"></script>
+<script src="chart-guide.js?v=0.8.20" onerror="void 0"></script>
 <script src="news.js?v=0.8.18" onerror="void 0"></script>
 <script src="ecocal.js?v=0.8.18" onerror="void 0"></script>
 </body>
