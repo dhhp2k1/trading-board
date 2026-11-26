@@ -1,4 +1,4 @@
-"""Cross-border ETF returns at a common completed Beijing minute."""
+"""Cross-border ETF opening returns and synchronized comparisons."""
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -83,10 +83,25 @@ def currency_for(group, ref):
 
 
 def stamp(t):
-    return time.strftime("%Y-%m-%d %H:%M", time.gmtime(t))
+    pattern = "%Y-%m-%d %H:%M:%S" if t % 60 else "%Y-%m-%d %H:%M"
+    return time.strftime(pattern, time.gmtime(t))
 
 
-def compare(symbol, cached, domestic_minutes, backup_minutes, yahoo):
+def local_quote(symbol, quotes, now):
+    quote = quotes([symbol]).get(symbol, {})
+    timestamp = quote.get("timestamp")
+    if not valid(timestamp) or timestamp > now or not valid(quote.get("volume")):
+        return {}
+    observed = int(timestamp) + BJ
+    minute = observed % 86400 // 60
+    if not (570 <= minute <= 690 or 780 <= minute <= 900):
+        return {}
+    if not (valid(quote.get("open")) or valid(quote.get("price"))):
+        return {}
+    return {**quote, "observed": observed}
+
+
+def compare(symbol, cached, domestic_minutes, backup_minutes, yahoo, quotes=None):
     groups, _ = catalog()
     group = groups.get(symbol)
     if not group or "跨境" not in group["market"]:
@@ -94,8 +109,25 @@ def compare(symbol, cached, domestic_minutes, backup_minutes, yahoo):
     ref = REFERENCES.get(group["key"])
     currency = currency_for(group, ref)
     now = time.time()
+    today = int((now + BJ) // 86400 * 86400)
     midnight, local, source = cached(("etf-session", symbol), 20,
         lambda: local_session(symbol, (domestic_minutes, backup_minutes), now))
+    local = local.copy()
+    if quotes and (midnight != today or today + 570 * 60 not in local or len(local) < 2):
+        try:
+            quote = cached(("etf-local-quote", symbol), 20, lambda: local_quote(symbol, quotes, now))
+        except DATA_ERRORS:
+            quote = {}
+        observed = quote.get("observed")
+        if observed is not None and observed // 86400 * 86400 == today:
+            if midnight != today:
+                midnight, local, source = today, {}, None
+            if today + 570 * 60 not in local and valid(quote.get("open")):
+                local[today + 570 * 60] = quote["open"]
+            if observed > today + 570 * 60 and valid(quote.get("price")):
+                local.setdefault(observed, quote["price"])
+            sources = dict.fromkeys(filter(None, (source, quote.get("source"))))
+            source = " / ".join(sources) or None
     rows = [
         {"key": "etf", "name": "ETF 场内", "source": source, "pct": None},
         {"key": "benchmark", "name": ref[1] if ref else "跟踪基准", "pct": None,
@@ -106,19 +138,16 @@ def compare(symbol, cached, domestic_minutes, backup_minutes, yahoo):
     ]
     result = {"crossBorder": True, "rows": rows}
     if midnight is None:
-        return dict(result, message="暂无 ETF 分时成交")
+        midnight = today
     start = midnight + 570 * 60
     result["start"] = stamp(start)
-    if start not in local:
-        return dict(result, message="缺少 ETF 09:30 开盘成交基准")
-    cutoff = min(int(now + BJ) // 60 * 60, max(local))
+    finish = min(int(now + BJ) // 60 * 60, midnight + 900 * 60)
 
     def load(ticker):
-        if not ticker:
+        if not ticker or finish <= start:
             return {}
         try:
             # Cache provider bars through the current completed minute, independently of fund.
-            finish = min(int(now + BJ) // 60 * 60, midnight + 900 * 60)
             return cached(("etf-foreign", ticker, start), 20,
                           lambda: foreign_session(ticker, start, finish, yahoo))
         except DATA_ERRORS:
@@ -126,35 +155,35 @@ def compare(symbol, cached, domestic_minutes, backup_minutes, yahoo):
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         overseas, fx = pool.map(load, (ref[0] if ref else None, FX.get(currency)))
-    common = {t for t in local if start < t <= cutoff}
-    usable = [local]
-    for series in (overseas, fx):
-        if start in series and common.intersection(series):
-            usable.append(series)
-    endpoint = max(common.intersection(*(series.keys() for series in usable)), default=None)
-    if endpoint is None and common:
-        endpoint = max(common)
-    if endpoint is None:
-        return dict(result, message="暂无共同完成的分钟")
-
-    result["end"] = stamp(endpoint)
+    series_by_row = (local, overseas, fx)
+    candidates = [{t for t in series if t > start} if start in series else set()
+                  for series in series_by_row]
+    endpoint = max(set.union(*candidates),
+                   key=lambda t: (sum(t in points for points in candidates), t), default=None)
+    if endpoint is not None and sum(endpoint in points for points in candidates) > 1:
+        result["end"] = stamp(endpoint)
     ratios = {}
-    for row, series in zip(rows, (local, overseas, fx)):
-        if start in series and endpoint in series:
-            ratio = series[endpoint] / series[start]
-            ratios[row["key"]] = ratio
+    for row, series, points in zip(rows, series_by_row, candidates):
+        if series:
+            row["observedAt"] = stamp(max(series))
+        row_endpoint = endpoint if endpoint in points else max(points, default=None)
+        if row_endpoint is not None:
+            ratio = series[row_endpoint] / series[start]
+            if row_endpoint == endpoint:
+                ratios[row["key"]] = ratio
             row["pct"] = (ratio - 1) * 100
-            row["time"] = result["end"]
-        elif not row["source"]:
-            row["status"] = "暂无适用序列"
+            row["time"] = stamp(row_endpoint)
+        elif not series:
+            row["status"] = "暂无成交数据" if row["source"] or row["key"] == "etf" else "无映射数据源"
         elif start not in series:
-            row["status"] = "缺少 09:30 数据"
+            row["status"] = "缺少 09:30 基准"
         else:
-            row["status"] = "缺少同期数据"
-    if len(ratios) == 3:
+            row["status"] = "缺少开盘后成交"
+    if "benchmark" in ratios and "fx" in ratios:
         converted = ratios["benchmark"] * ratios["fx"]
-        rows.extend((
-            {"key": "converted", "name": "基准折算人民币", "pct": (converted - 1) * 100},
-            {"key": "difference", "name": "ETF 相对基准偏离", "pct": (ratios["etf"] / converted - 1) * 100},
-        ))
+        rows.append({"key": "converted", "name": "基准折算人民币", "pct": (converted - 1) * 100,
+                     "time": result["end"]})
+        if "etf" in ratios:
+            rows.append({"key": "difference", "name": "ETF 相对基准偏离", "pct": (ratios["etf"] / converted - 1) * 100,
+                         "time": result["end"]})
     return result

@@ -22,9 +22,9 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 # 版本戳：每次发版改这里。顶栏会显示，桌面启动器也用它判断后台跑的是不是旧版本
-VERSION = "0.8.18"
+VERSION = "0.8.19"
 CHANNEL = "next"
-BUILD = "2026-11-25 15:27"
+BUILD = "2026-11-26 10:33"
 
 PORT = int(os.environ.get("BOARD_PORT", "8765"))
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -783,7 +783,8 @@ class Handler(SimpleHTTPRequestHandler):
             if u.path == "/api/etf-decomposition":
                 import etf_decomposition
                 symbol = qs.get("s", [""])[0]
-                return self.send_json(etf_decomposition.compare(symbol, cached, tencent_kline, em_kline, yahoo_chart))
+                return self.send_json(etf_decomposition.compare(
+                    symbol, cached, tencent_kline, em_kline, yahoo_chart, tencent_quotes))
             if u.path == "/api/group-reference":
                 symbol = qs.get("s", [""])[0]
                 day = qs.get("day", [""])[0]

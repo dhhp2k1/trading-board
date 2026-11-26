@@ -99,9 +99,12 @@
     const heading = document.createElement("strong");
     heading.textContent = "跨境 ETF 价差拆解";
     const interval = document.createElement("p");
-    interval.textContent = data.start && data.end
-      ? `北京时间 ${data.start} 至 ${data.end.slice(-5)}`
-      : data.message || "暂无同期行情";
+    const aligned = data.start && data.end;
+    interval.textContent = [aligned && `北京时间 ${data.start} 至 ${data.end.slice(-5)}`,
+      data.message].filter(Boolean).join(" · ") || "暂无可比区间";
+    decomposition.replaceChildren(heading, interval);
+    decomposition.hidden = false;
+    if (!data.rows?.length) return;
     const table = document.createElement("table");
     table.setAttribute("aria-label", heading.textContent);
     const head = table.createTHead().insertRow();
@@ -112,7 +115,7 @@
       head.append(cell);
     }
     const metrics = table.createTBody();
-    for (const item of data.rows || []) {
+    for (const item of data.rows) {
       const row = metrics.insertRow();
       const label = document.createElement("th");
       label.scope = "row";
@@ -121,12 +124,19 @@
       if (source) label.title = source;
       row.append(label);
       const value = row.insertCell();
-      value.textContent = Number.isFinite(item.pct) ? percentText(item.pct) : "暂无";
+      const available = Number.isFinite(item.pct);
+      value.textContent = available ? percentText(item.pct) : item.status || data.message || "缺少同期数据";
       value.className = item.pct > 0 ? "up" : item.pct < 0 ? "down" : "";
-      row.insertCell().textContent = item.time?.slice(-5) || item.status || "";
+      const observation = item.observedAt;
+      const time = row.insertCell();
+      time.textContent = available ? timeText(item.time) : timeText(observation);
+      if (available && observation && observation !== item.time) {
+        const latest = document.createElement("small");
+        latest.textContent = "最近 " + timeText(observation);
+        time.append(latest);
+      }
     }
-    decomposition.replaceChildren(heading, interval, table);
-    decomposition.hidden = false;
+    decomposition.append(table);
   }
 
   async function loadDecomposition(symbol, controller) {
@@ -136,11 +146,13 @@
     try {
       const response = await fetch("/api/etf-decomposition?s=" + encodeURIComponent(symbol),
         { signal: controller.signal });
-      if (!response.ok) return;
+      if (!response.ok) throw new Error("ETF decomposition unavailable");
       const data = await response.json();
       if (request === controller && dialog.open) renderDecomposition(data);
     } catch {
-      // The peer table is loaded independently.
+      if (request === controller && dialog.open && !controller.signal.aborted) {
+        renderDecomposition({ crossBorder: true, message: "分时数据请求失败" });
+      }
     }
   }
 
